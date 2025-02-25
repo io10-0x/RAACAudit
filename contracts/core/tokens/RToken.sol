@@ -44,7 +44,10 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
     }
 
     mapping(address => UserState) private _userState;
- 
+
+    uint256 public amount1; //c for testing purposes
+    uint256 public scaledAmount1; //c for testing purposes
+    uint256 public transferAmount; //c for testing purposes
 
     // MODIFIERS
 
@@ -71,7 +74,8 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
         address initialOwner,
         address assetAddress
     ) ERC20(name, symbol) ERC20Permit(name) Ownable(initialOwner) {
-        if (initialOwner == address(0) || assetAddress == address(0)) revert InvalidAddress();
+        if (initialOwner == address(0) || assetAddress == address(0))
+            revert InvalidAddress();
         _liquidityIndex = WadRayMath.RAY;
         _assetAddress = assetAddress;
     }
@@ -93,7 +97,9 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @notice Updates the liquidity index
      * @param newLiquidityIndex The new liquidity index
      */
-    function updateLiquidityIndex(uint256 newLiquidityIndex) external override onlyReservePool {
+    function updateLiquidityIndex(
+        uint256 newLiquidityIndex
+    ) external override onlyReservePool {
         if (newLiquidityIndex < _liquidityIndex) revert InvalidAmount();
         _liquidityIndex = newLiquidityIndex;
         emit LiquidityIndexUpdated(newLiquidityIndex);
@@ -116,7 +122,12 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
         address onBehalfOf,
         uint256 amountToMint,
         uint256 index
-    ) external override onlyReservePool returns (bool, uint256, uint256, uint256) {
+    )
+        external
+        override
+        onlyReservePool
+        returns (bool, uint256, uint256, uint256)
+    {
         if (amountToMint == 0) {
             return (false, 0, 0, 0);
         }
@@ -127,9 +138,14 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
         bool isFirstMint = scaledBalance == 0;
 
         uint256 balanceIncrease = 0;
-        if (_userState[onBehalfOf].index != 0 && _userState[onBehalfOf].index < index) {
-            balanceIncrease = scaledBalance.rayMul(index) - scaledBalance.rayMul(_userState[onBehalfOf].index);
-        }
+        if (
+            _userState[onBehalfOf].index != 0 &&
+            _userState[onBehalfOf].index < index
+        ) {
+            balanceIncrease =
+                scaledBalance.rayMul(index) -
+                scaledBalance.rayMul(_userState[onBehalfOf].index);
+        } // bug there is no balanceIncrease if this is the user's first mint which is wrong . this might be a low cuz this balanceIncrease literally does nothing
 
         _userState[onBehalfOf].index = index.toUint128();
 
@@ -161,13 +177,13 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
             return (0, totalSupply(), 0);
         }
 
-        uint256 userBalance = balanceOf(from);  
+        uint256 userBalance = balanceOf(from); //c dont forget that balanceOf scales amount by liq index
 
-        _userState[from].index = index.toUint128();
+        _userState[from].index = index.toUint128(); //c this line doesnt really do anything because the idea of it was to do the balanceIncrease thing when rtokens are minted which we already saw in debttoken was a bad idea but balanceincrease is declared but not used in mint function of rtoken so this line is useless
 
-        if(amount > userBalance){
+        if (amount > userBalance) {
             amount = userBalance;
-        }
+        } //c this block makes sure a user cannot burn more than they have
 
         uint256 amountScaled = amount.rayMul(index);
 
@@ -183,7 +199,7 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
 
         return (amount, totalSupply(), amount);
     }
-    
+
     // VIEW FUNCTIONS
 
     /**
@@ -191,17 +207,30 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param account The address of the user
      * @return The user's balance (scaled by the liquidity index)
      */
-    function balanceOf(address account) public view override(ERC20, IERC20) returns (uint256) {
+    function balanceOf(
+        address account
+    ) public view override(ERC20, IERC20) returns (uint256) {
         uint256 scaledBalance = super.balanceOf(account);
-        return scaledBalance.rayMul(ILendingPool(_reservePool).getNormalizedIncome());
+        return
+            scaledBalance.rayMul(
+                ILendingPool(_reservePool).getNormalizedIncome()
+            );
     }
 
     /**
      * @notice Returns the scaled total supply
      * @return The total supply (scaled by the liquidity index)
      */
-    function totalSupply() public view override(ERC20, IERC20) returns (uint256) {
-        return super.totalSupply().rayMul(ILendingPool(_reservePool).getNormalizedIncome());
+    function totalSupply()
+        public
+        view
+        override(ERC20, IERC20)
+        returns (uint256)
+    {
+        return
+            super.totalSupply().rayMul(
+                ILendingPool(_reservePool).getNormalizedIncome()
+            );
     }
 
     /**
@@ -209,8 +238,13 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param recipient The recipient address
      * @param amount The amount to transfer (in underlying asset units)
      */
-    function transfer(address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
-        uint256 scaledAmount = amount.rayDiv(ILendingPool(_reservePool).getNormalizedIncome());
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) public override(ERC20, IERC20) returns (bool) {
+        uint256 scaledAmount = amount.rayDiv(
+            ILendingPool(_reservePool).getNormalizedIncome()
+        ); //bug REPORTED this amount to transfer shouldnt be scaled because when a user mints Rtokens, the amount they are minted is already scaled so there is no reason to scale the amounts again when transferring
         return super.transfer(recipient, scaledAmount);
     }
 
@@ -220,7 +254,11 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param recipient The recipient address
      * @param amount The amount to transfer (in underlying asset units)
      */
-    function transferFrom(address sender, address recipient, uint256 amount) public override(ERC20, IERC20) returns (bool) {
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override(ERC20, IERC20) returns (bool) {
         uint256 scaledAmount = amount.rayDiv(_liquidityIndex);
         return super.transferFrom(sender, recipient, scaledAmount);
     }
@@ -293,10 +331,12 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param user The address of the user to receive the asset
      * @param amount The amount of the asset to transfer
      */
-    function transferAsset(address user, uint256 amount) external override onlyReservePool {
+    function transferAsset(
+        address user,
+        uint256 amount
+    ) external override onlyReservePool {
         IERC20(_assetAddress).safeTransfer(user, amount);
     }
-
 
     /**
      * @dev Internal function to handle token transfers, mints, and burns
@@ -304,9 +344,17 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param to The recipient address
      * @param amount The amount of tokens
      */
-    function _update(address from, address to, uint256 amount) internal override {
+    function _update(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
         // Scale amount by normalized income for all operations (mint, burn, transfer)
-        uint256 scaledAmount = amount.rayDiv(ILendingPool(_reservePool).getNormalizedIncome());
+        amount1 = amount; //c for testing purposes
+        uint256 scaledAmount = amount.rayDiv(
+            ILendingPool(_reservePool).getNormalizedIncome()
+        );
+        scaledAmount1 = scaledAmount; //c for testing purposes
         super._update(from, to, scaledAmount);
     }
 
@@ -316,15 +364,25 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      */
     function calculateDustAmount() public view returns (uint256) {
         // Calculate the actual balance of the underlying asset held by this contract
-        uint256 contractBalance = IERC20(_assetAddress).balanceOf(address(this)).rayDiv(ILendingPool(_reservePool).getNormalizedIncome());
+        uint256 contractBalance = IERC20(_assetAddress)
+            .balanceOf(address(this))
+            .rayDiv(ILendingPool(_reservePool).getNormalizedIncome());
+        //c this division is because the amount from balanceOf is multiplied by liq index so we need to divide again to get the actual amount. they coudve just used the scaledBalanceOf function instead of doing this division
 
         // Calculate the total real obligations to the token holders
         uint256 currentTotalSupply = totalSupply();
 
         // Calculate the total real balance equivalent to the total supply
-        uint256 totalRealBalance = currentTotalSupply.rayMul(ILendingPool(_reservePool).getNormalizedIncome());
+        uint256 totalRealBalance = currentTotalSupply.rayMul(
+            ILendingPool(_reservePool).getNormalizedIncome()
+        );
+        //bug REPORTED totalrealbalance is overestimated leading to dust possibly being calculated as 0 when it shouldnt be due to precision error in the multiplication and division
+
         // All balance, that is not tied to rToken are dust (can be donated or is the rest of exponential vs linear)
-        return contractBalance <= totalRealBalance ? 0 : contractBalance - totalRealBalance;
+        return
+            contractBalance <= totalRealBalance
+                ? 0
+                : contractBalance - totalRealBalance;
     }
 
     /**
@@ -334,11 +392,15 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @param recipient The address to send the rescued tokens to
      * @param amount The amount of tokens to rescue
      */
-    function rescueToken(address tokenAddress, address recipient, uint256 amount) external onlyReservePool {
+    function rescueToken(
+        address tokenAddress,
+        address recipient,
+        uint256 amount
+    ) external onlyReservePool {
         if (recipient == address(0)) revert InvalidAddress();
         if (tokenAddress == _assetAddress) revert CannotRescueMainAsset();
         IERC20(tokenAddress).safeTransfer(recipient, amount);
-    }
+    } //c just something to note but this function says that the assetaddress cannot be rescued but it in fact can be rescued using transferaccrueddust and calculatedustamount functions
 
     /**
      * @notice Allows the Reserve Pool to transfer accrued token dust
@@ -348,14 +410,17 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      *
      * Limits transfer to actual dust amount
      */
-    function transferAccruedDust(address recipient, uint256 amount) external onlyReservePool {
+    function transferAccruedDust(
+        address recipient,
+        uint256 amount
+    ) external onlyReservePool {
         if (recipient == address(0)) revert InvalidAddress();
 
         uint256 poolDustBalance = calculateDustAmount();
-        if(poolDustBalance == 0) revert NoDust();
+        if (poolDustBalance == 0) revert NoDust();
 
         // Cap the transfer amount to the actual dust balance
-        uint256 transferAmount = (amount < poolDustBalance) ? amount : poolDustBalance;
+        transferAmount = (amount < poolDustBalance) ? amount : poolDustBalance;
 
         // Transfer the amount to the recipient
         IERC20(_assetAddress).safeTransfer(recipient, transferAmount);
@@ -367,7 +432,13 @@ contract RToken is ERC20, ERC20Permit, IRToken, Ownable {
      * @notice Returns the number of decimals used to get its user representation.
      * @return The number of decimals.
      */
-    function decimals() public view virtual override(ERC20, IRToken) returns (uint8) {
+    function decimals()
+        public
+        view
+        virtual
+        override(ERC20, IRToken)
+        returns (uint8)
+    {
         return super.decimals();
     }
 }

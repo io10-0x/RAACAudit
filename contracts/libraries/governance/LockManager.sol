@@ -18,9 +18,9 @@ library LockManager {
      * @dev Stores the lock amount, end time, and existence flag
      */
     struct Lock {
-        uint256 amount;    // Amount of tokens locked
-        uint256 end;       // Timestamp when lock expires
-        bool exists;       // Flag indicating if lock exists
+        uint256 amount; // Amount of tokens locked
+        uint256 end; // Timestamp when lock expires
+        bool exists; // Flag indicating if lock exists
     }
 
     /**
@@ -38,12 +38,12 @@ library LockManager {
      * @dev Maintains mappings and totals for all locks
      */
     struct LockState {
-        mapping(address => Lock) locks;      // User lock positions
-        uint256 totalLocked;                 // Total amount of tokens locked
-        uint256 minLockDuration;            // Minimum allowed lock duration
-        uint256 maxLockDuration;            // Maximum allowed lock duration
-        uint256 maxTotalLocked;             // Maximum total amount of tokens that can be locked
-        uint256 maxLockAmount;             // Maximum amount of tokens that can be locked in a single position
+        mapping(address => Lock) locks; // User lock positions //c this is absolutely amazing. they have a mapping inside a struct. If any data inside this mapping is deleted, the mapping will still exist. FIND A PLACE WHERE THEY TRY TO DELETE A MAPPING
+        uint256 totalLocked; // Total amount of tokens locked
+        uint256 minLockDuration; // Minimum allowed lock duration
+        uint256 maxLockDuration; // Maximum allowed lock duration
+        uint256 maxTotalLocked; // Maximum total amount of tokens that can be locked
+        uint256 maxLockAmount; // Maximum amount of tokens that can be locked in a single position
     }
 
     /**
@@ -122,19 +122,18 @@ library LockManager {
     ) internal returns (uint256 end) {
         // Validation logic remains the same
         if (state.minLockDuration != 0 && state.maxLockDuration != 0) {
-            if (duration < state.minLockDuration || duration > state.maxLockDuration) 
-                revert InvalidLockDuration();
-        }
+            if (
+                duration < state.minLockDuration ||
+                duration > state.maxLockDuration
+            ) revert InvalidLockDuration();
+        } //c this first if statement will always hit because the state is fully updated in the constructor of veRAACToken.sol. these same checks are done in veRAACToken::lock
 
         if (amount == 0) revert InvalidLockAmount();
 
-        end = block.timestamp + duration;
-        
-        state.locks[user] = Lock({
-            amount: amount,
-            end: end,
-            exists: true
-        });
+        end = block.timestamp + duration; //c when the user's lock ends
+
+        state.locks[user] = Lock({amount: amount, end: end, exists: true});
+        //c this is absolutely amazing. they have a mapping inside a struct. If any data inside this mapping is deleted, the mapping will still exist. FIND A PLACE WHERE THEY TRY TO DELETE A MAPPING
 
         state.totalLocked += amount;
 
@@ -157,12 +156,13 @@ library LockManager {
         Lock storage lock = state.locks[user];
         if (!lock.exists) revert LockNotFound();
         if (lock.end <= block.timestamp) revert LockExpired();
-        
+
         // Maximum lock amount
-        if (lock.amount + additionalAmount > state.maxLockAmount) revert AmountExceedsLimit();
+        if (lock.amount + additionalAmount > state.maxLockAmount)
+            revert AmountExceedsLimit();
         // Maximum total locked amount
         // if (state.totalLocked + additionalAmount > state.maxTotalLocked) revert AmountExceedsLimit();
-        
+
         lock.amount += additionalAmount;
         state.totalLocked += additionalAmount;
 
@@ -185,24 +185,25 @@ library LockManager {
         Lock storage lock = state.locks[user];
         if (!lock.exists) revert LockNotFound();
         if (lock.end <= block.timestamp) revert LockExpired();
-        
+
         // Calculate remaining duration from current lock
         uint256 remainingDuration = lock.end - block.timestamp;
-        
+
         // Calculate total new duration (remaining + extension)
         uint256 totalNewDuration = remainingDuration + extensionDuration;
-        
+
         // Check if total duration exceeds max lock duration
-        if (totalNewDuration > state.maxLockDuration) revert InvalidLockDuration();
-        
+        if (totalNewDuration > state.maxLockDuration)
+            revert InvalidLockDuration();
+
         // Calculate new end time
         newEnd = block.timestamp + totalNewDuration;
-        
+
         // Update lock end time
         lock.end = newEnd;
         emit LockExtended(user, newEnd);
         return newEnd;
-    }
+    } //c this checks out
 
     /**
      * @notice Retrieves lock information for an account

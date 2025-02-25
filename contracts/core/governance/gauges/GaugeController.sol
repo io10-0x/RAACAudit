@@ -33,7 +33,12 @@ import "../../../libraries/governance/BoostCalculator.sol";
  * - Revenue sharing distributes protocol fees between veToken holders and gauges
  * - Emergency controls allow pausing and shutting down gauges
  */
-contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pausable {
+contract GaugeController is
+    IGaugeController,
+    AccessControl,
+    ReentrancyGuard,
+    Pausable
+{
     using SafeERC20 for IERC20;
     using TimeWeightedAverage for TimeWeightedAverage.Period;
     using BoostCalculator for BoostCalculator.BoostState;
@@ -45,7 +50,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @dev FEE_ADMIN controls fee parameters
      */
     bytes32 public constant GAUGE_ADMIN = keccak256("GAUGE_ADMIN");
-    bytes32 public constant EMERGENCY_ADMIN = keccak256("EMERGENCY_ADMIN"); 
+    bytes32 public constant EMERGENCY_ADMIN = keccak256("EMERGENCY_ADMIN");
     bytes32 public constant FEE_ADMIN = keccak256("FEE_ADMIN");
 
     /**
@@ -64,13 +69,13 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @dev All values in basis points (10000 = 100%)
      */
     /// @notice Maximum boost multiplier (2.5x)
-    uint256 public constant MAX_BOOST = 25000;        // 2.5x maximum boost
+    uint256 public constant MAX_BOOST = 25000; // 2.5x maximum boost
     /// @notice Minimum boost multiplier (1.0x)
-    uint256 public constant MIN_BOOST = 10000;        // 1.0x minimum boost
+    uint256 public constant MIN_BOOST = 10000; // 1.0x minimum boost
     /// @notice Weight precision
-    uint256 public constant WEIGHT_PRECISION = 10000;  // Weight precision
+    uint256 public constant WEIGHT_PRECISION = 10000; // Weight precision
     /// @notice Maximum type weight
-    uint256 public constant MAX_TYPE_WEIGHT = 10000;   // Maximum type weight
+    uint256 public constant MAX_TYPE_WEIGHT = 10000; // Maximum type weight
 
     /**
      * @notice Voting system configuration and state
@@ -87,7 +92,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     /// @notice Maximum allowed vote delay
     uint256 public constant MAX_VOTE_DELAY = 10 days;
     /// @notice Minimum vote weight allowed
-    uint256 public constant MIN_VOTE_WEIGHT = 100;    // 1% minimum vote
+    uint256 public constant MIN_VOTE_WEIGHT = 100; // 1% minimum vote
     /**
      * @notice Type weights and periods
      * @dev Tracking for gauge type weights and their time periods
@@ -129,15 +134,15 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      */
     constructor(address _veRAACToken) {
         if (_veRAACToken == address(0)) revert InvalidAddress();
-        
+
         veRAACToken = IERC20(_veRAACToken);
-        
+
         // Setup roles
         _initializeRoles();
-        
+
         // Initialize boost parameters
         _initializeBoostParameters();
-            
+
         // Set default type weights
         _initializeTypeWeights();
     }
@@ -187,18 +192,22 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gauge Address of gauge to vote for
      * @param weight New weight value in basis points (0-10000)
      */
-    function vote(address gauge, uint256 weight) external override whenNotPaused {
+    function vote(
+        address gauge,
+        uint256 weight
+    ) external override whenNotPaused {
         if (!isGauge(gauge)) revert GaugeNotFound();
         if (weight > WEIGHT_PRECISION) revert InvalidWeight();
-        
-        uint256 votingPower = veRAACToken.balanceOf(msg.sender);
+
+        uint256 votingPower = veRAACToken.balanceOf(msg.sender); //bug REPORTED balanceOf does not take rate of decay into account so this is not the correct way to get voting power and a user who's lock has ended and should have no voting power can still vote
         if (votingPower == 0) revert NoVotingPower();
 
+        //bug REPORTED user can use the same voting power to vote on multiple gauges
         uint256 oldWeight = userGaugeVotes[msg.sender][gauge];
         userGaugeVotes[msg.sender][gauge] = weight;
-        
+
         _updateGaugeWeight(gauge, oldWeight, weight, votingPower);
-        
+
         emit WeightUpdated(gauge, oldWeight, weight);
     }
 
@@ -216,12 +225,14 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         uint256 newWeight,
         uint256 votingPower
     ) internal {
+        //bug no check to see if the period is over ??
         Gauge storage g = gauges[gauge];
-        
+
         uint256 oldGaugeWeight = g.weight;
-        uint256 newGaugeWeight = oldGaugeWeight - (oldWeight * votingPower / WEIGHT_PRECISION)
-            + (newWeight * votingPower / WEIGHT_PRECISION);
-            
+        uint256 newGaugeWeight = oldGaugeWeight -
+            ((oldWeight * votingPower) / WEIGHT_PRECISION) +
+            ((newWeight * votingPower) / WEIGHT_PRECISION);
+
         g.weight = newGaugeWeight;
         g.lastUpdateTime = block.timestamp;
     }
@@ -257,7 +268,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         });
 
         // Initialize period with current timestamp
-        TimeWeightedAverage.Period storage period = gaugePeriods[gauge];
+        TimeWeightedAverage.Period storage period = gaugePeriods[gauge]; //c so this period is simply a storage pointer that points to the period struct that this mapping points to. At this moment, since we are just adding the gauge, the period struct is empty but it will be filled as we pass this period storage pointer is passed to the createPeriod function below
         TimeWeightedAverage.createPeriod(
             period,
             block.timestamp, // Start from current timestamp
@@ -278,10 +289,10 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     function updatePeriod(address gauge) external override whenNotPaused {
         Gauge storage g = gauges[gauge];
         if (!g.isActive) revert GaugeNotActive();
-        
+
         TimeWeightedAverage.Period storage period = gaugePeriods[gauge];
         uint256 duration = g.gaugeType == GaugeType.RWA ? 30 days : 7 days;
-        
+
         // If this is the first period, initialize it
         if (period.startTime == 0) {
             TimeWeightedAverage.createPeriod(
@@ -289,20 +300,23 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
                 // Add 1 second to avoid timestamp collision
                 block.timestamp + 1,
                 duration,
-                0,
+                0, //bug this is different to what was done in addGauge as this value was given the weight of the gauge in addGauge but here it is 0
                 g.weight
             );
             emit PeriodRolled(gauge, block.timestamp, g.weight);
             return;
         }
-        
+
         // Check if current period has elapsed
         if (block.timestamp < period.startTime + period.totalDuration) {
             revert PeriodNotElapsed();
         }
-        
-        uint256 average = TimeWeightedAverage.calculateAverage(period, block.timestamp);
-        
+
+        uint256 average = TimeWeightedAverage.calculateAverage(
+            period,
+            block.timestamp
+        );
+
         TimeWeightedAverage.createPeriod(
             period,
             // Add 1 second to avoid timestamp collision
@@ -311,7 +325,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
             average,
             g.weight
         );
-        
+
         emit PeriodRolled(gauge, block.timestamp, g.weight);
     }
 
@@ -323,12 +337,13 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     function distributeRewards(
         address gauge
     ) external override nonReentrant whenNotPaused {
+        //bug is anyone supposed to be able to call this at any time ?? if so, i can simply vote for a gauge and give it the full weight and then call this function to get all the rewards and then rinse and repeat whenever rewards get sent to this contract
         if (!isGauge(gauge)) revert GaugeNotFound();
         if (!gauges[gauge].isActive) revert GaugeNotActive();
-        
+
         uint256 reward = _calculateReward(gauge);
         if (reward == 0) return;
-        
+
         IGauge(gauge).notifyRewardAmount(reward);
         emit RewardDistributed(gauge, msg.sender, reward);
     }
@@ -344,10 +359,10 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         uint256 weight
     ) external onlyRole(GAUGE_ADMIN) {
         if (weight > MAX_TYPE_WEIGHT) revert InvalidWeight();
-        
+
         uint256 oldWeight = typeWeights[gaugeType];
         typeWeights[gaugeType] = weight;
-        
+
         emit TypeWeightUpdated(gaugeType, oldWeight, weight);
     }
 
@@ -357,18 +372,24 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gauge Address of gauge to calculate reward for
      * @return Calculated reward amount
      */
-    function _calculateReward(address gauge) internal view returns (uint256) {
+    function _calculateReward(address gauge) public view returns (uint256) {
+        //c was internal but i changed to public for testing purposes
         Gauge storage g = gauges[gauge];
         uint256 totalWeight = getTotalWeight();
         if (totalWeight == 0) return 0;
-        
-        uint256 gaugeShare = (g.weight * WEIGHT_PRECISION) / totalWeight;
-        uint256 typeShare = (typeWeights[g.gaugeType] * WEIGHT_PRECISION) / MAX_TYPE_WEIGHT;
-        
+
+        uint256 gaugeShare = (g.weight * WEIGHT_PRECISION) / totalWeight; //c how many percent of the totalweight does this gauge have is what this line is getting
+        uint256 typeShare = (typeWeights[g.gaugeType] * WEIGHT_PRECISION) /
+            MAX_TYPE_WEIGHT;
+
         // Calculate period emissions based on gauge type
-        uint256 periodEmission = g.gaugeType == GaugeType.RWA ? _calculateRWAEmission() : _calculateRAACEmission();
-            
-        return (periodEmission * gaugeShare * typeShare) / (WEIGHT_PRECISION * WEIGHT_PRECISION);
+        uint256 periodEmission = g.gaugeType == GaugeType.RWA
+            ? _calculateRWAEmission()
+            : _calculateRAACEmission();
+
+        return
+            (periodEmission * gaugeShare * typeShare) /
+            (WEIGHT_PRECISION * WEIGHT_PRECISION);
     }
 
     /**
@@ -379,7 +400,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     function _calculateRWAEmission() internal view returns (uint256) {
         // Monthly RWA emission calculation
         // This should be implemented based on your tokenomics
-        return 1000000 * 10**18; // Example value
+        return 1000000 * 10 ** 18; // Example value
     }
 
     /**
@@ -390,7 +411,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     function _calculateRAACEmission() internal view returns (uint256) {
         // Weekly RAAC emission calculation
         // This should be implemented based on your tokenomics
-        return 250000 * 10**18; // Example value
+        return 250000 * 10 ** 18; // Example value
     }
 
     /**
@@ -407,7 +428,9 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gauge Address of gauge
      * @return Current gauge weight
      */
-    function getGaugeWeight(address gauge) external view override returns (uint256) {
+    function getGaugeWeight(
+        address gauge
+    ) external view override returns (uint256) {
         return gauges[gauge].weight;
     }
 
@@ -431,7 +454,9 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gType Type of gauge
      * @return Weight for the gauge type
      */
-    function getTypeWeight(GaugeType gType) external view override returns (uint256) {
+    function getTypeWeight(
+        GaugeType gType
+    ) external view override returns (uint256) {
         return typeWeights[gType];
     }
 
@@ -497,10 +522,10 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
     function emergencyShutdown(address gauge) external {
         if (!hasRole(EMERGENCY_ADMIN, msg.sender)) revert UnauthorizedCaller();
         if (!isGauge(gauge)) revert GaugeNotFound();
-        
+
         gauges[gauge].isActive = false;
         emit EmergencyShutdown(gauge, msg.sender);
-    }   
+    }
 
     /**
      * @notice Distributes revenue between veToken holders and gauges
@@ -513,17 +538,20 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         uint256 amount
     ) external onlyRole(EMERGENCY_ADMIN) whenNotPaused {
         if (amount == 0) revert InvalidAmount();
-        
-        uint256 veRAACShare = amount * 80 / 100; // 80% to veRAAC holders
-        uint256 performanceShare = amount * 20 / 100; // 20% performance fee
-        
+
+        uint256 veRAACShare = (amount * 80) / 100; // 80% to veRAAC holders
+        uint256 performanceShare = (amount * 20) / 100; // 20% performance fee
+
         revenueShares[gaugeType] += veRAACShare;
         _distributeToGauges(gaugeType, veRAACShare);
-        
-        emit RevenueDistributed(gaugeType, amount, veRAACShare, performanceShare);
-    }
 
-  
+        emit RevenueDistributed(
+            gaugeType,
+            amount,
+            veRAACShare,
+            performanceShare
+        );
+    }
 
     /**
      * @notice Distributes rewards to gauges of a specific type
@@ -531,10 +559,7 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gaugeType Type of gauges to distribute to
      * @param amount Total amount to distribute
      */
-    function _distributeToGauges(
-        GaugeType gaugeType,
-        uint256 amount
-    ) internal {
+    function _distributeToGauges(GaugeType gaugeType, uint256 amount) internal {
         uint256 totalTypeWeight = 0;
         uint256[] memory gaugeWeights = new uint256[](_gaugeList.length);
         uint256 activeGaugeCount = 0;
@@ -542,7 +567,9 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         // First pass: calculate total weight and store gauge weights
         for (uint256 i = 0; i < _gaugeList.length; i++) {
             address gauge = _gaugeList[i];
-            if (gauges[gauge].isActive && gauges[gauge].gaugeType == gaugeType) {
+            if (
+                gauges[gauge].isActive && gauges[gauge].gaugeType == gaugeType
+            ) {
                 gaugeWeights[i] = gauges[gauge].weight;
                 totalTypeWeight += gaugeWeights[i];
                 activeGaugeCount++;
@@ -554,8 +581,11 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         // Second pass: distribute rewards
         for (uint256 i = 0; i < _gaugeList.length; i++) {
             address gauge = _gaugeList[i];
-            if (gauges[gauge].isActive && gauges[gauge].gaugeType == gaugeType) {
-                uint256 gaugeShare = (amount * gaugeWeights[i]) / totalTypeWeight;
+            if (
+                gauges[gauge].isActive && gauges[gauge].gaugeType == gaugeType
+            ) {
+                uint256 gaugeShare = (amount * gaugeWeights[i]) /
+                    totalTypeWeight;
                 if (gaugeShare > 0) {
                     IGauge(gauge).notifyRewardAmount(gaugeShare);
                 }
@@ -569,7 +599,16 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param account Account to check
      * @return bool True if account has role
      */
-    function hasRole(bytes32 role, address account) public view virtual override(AccessControl, IGaugeController) returns (bool) {
+    function hasRole(
+        bytes32 role,
+        address account
+    )
+        public
+        view
+        virtual
+        override(AccessControl, IGaugeController)
+        returns (bool)
+    {
         return super.hasRole(role, account);
     }
 
@@ -586,7 +625,9 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
      * @param gauge Address of gauge
      * @return Gauge type as uint
      */
-    function getGaugeType(address gauge) external view override returns (uint256) {
+    function getGaugeType(
+        address gauge
+    ) external view override returns (uint256) {
         if (!isGauge(gauge)) revert GaugeNotFound();
         return uint256(gauges[gauge].gaugeType);
     }
@@ -605,15 +646,15 @@ contract GaugeController is IGaugeController, AccessControl, ReentrancyGuard, Pa
         uint256 amount
     ) external view returns (uint256 boostBasisPoints, uint256 boostedAmount) {
         if (!isGauge(gauge)) revert GaugeNotFound();
-        
+
         uint256 userBalance = veRAACToken.balanceOf(user);
         uint256 totalSupply = veRAACToken.totalSupply();
 
-        return boostState.calculateTimeWeightedBoost(
-            userBalance,
-            totalSupply,
-            amount
-        );
+        return
+            boostState.calculateTimeWeightedBoost(
+                userBalance,
+                totalSupply,
+                amount
+            );
     }
-
 }

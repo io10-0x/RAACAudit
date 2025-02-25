@@ -23,7 +23,12 @@ import "../../libraries/math/TimeWeightedAverage.sol";
  * - Configurable fee splits between stakeholders
  * - Emergency controls and access role management
  */
-contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable {
+contract FeeCollector is
+    IFeeCollector,
+    AccessControl,
+    ReentrancyGuard,
+    Pausable
+{
     using SafeERC20 for IRAACToken;
     using TimeWeightedAverage for TimeWeightedAverage.Period;
 
@@ -69,7 +74,7 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      */
     mapping(uint8 => FeeType) public feeTypes;
     CollectedFees public collectedFees;
-    
+
     /**
      * @notice Distribution tracking state
      * @dev Manages reward periods and user claims
@@ -104,7 +109,7 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
         address newAddress;
         uint256 effectiveTime;
     }
-    
+
     PendingUpdate public pendingTreasury;
     PendingUpdate public pendingRepairFund;
 
@@ -130,10 +135,14 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
         address _repairFund,
         address _admin
     ) {
-        if (_raacToken == address(0) || _veRAACToken == address(0) || 
-            _treasury == address(0) || _repairFund == address(0) || 
-            _admin == address(0)) revert InvalidAddress();
-            
+        if (
+            _raacToken == address(0) ||
+            _veRAACToken == address(0) ||
+            _treasury == address(0) ||
+            _repairFund == address(0) ||
+            _admin == address(0)
+        ) revert InvalidAddress();
+
         raacToken = IRAACToken(_raacToken);
         veRAACToken = IveRAACToken(_veRAACToken);
         treasury = _treasury;
@@ -144,10 +153,10 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
         _grantRole(FEE_MANAGER_ROLE, _admin);
         _grantRole(EMERGENCY_ROLE, _admin);
         _grantRole(DISTRIBUTOR_ROLE, _admin);
-        
+
         // Initialize fee types with protocol rules
         _initializeFeeTypes();
-        
+
         // Initialize distribution period
         distributionPeriod.startTime = block.timestamp;
         distributionPeriod.endTime = block.timestamp + 7 days;
@@ -159,16 +168,20 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param feeType Type of fee being collected
      * @return success True if collection successful
      */
-    function collectFee(uint256 amount, uint8 feeType) external override nonReentrant whenNotPaused returns (bool) {
+    function collectFee(
+        uint256 amount,
+        uint8 feeType
+    ) external override nonReentrant whenNotPaused returns (bool) {
+        //bug this cant be right. why is anyone allowed to call this function? this should be restricted to only the fee manager role
         if (amount == 0 || amount > MAX_FEE_AMOUNT) revert InvalidFeeAmount();
         if (feeType > 7) revert InvalidFeeType();
-        
+
         // Transfer tokens from sender
         raacToken.safeTransferFrom(msg.sender, address(this), amount);
-        
+
         // Update collected fees
         _updateCollectedFees(amount, feeType);
-        
+
         emit FeeCollected(feeType, amount);
         return true;
     }
@@ -177,17 +190,22 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @notice Distributes collected fees according to protocol rules
      * @dev Calculates shares for veRAAC holders, burn, repair fund and treasury
      */
-    function distributeCollectedFees() external override nonReentrant whenNotPaused {
+    function distributeCollectedFees()
+        external
+        override
+        nonReentrant
+        whenNotPaused
+    {
         if (!hasRole(DISTRIBUTOR_ROLE, msg.sender)) revert UnauthorizedCaller();
-        
+
         uint256 totalFees = _calculateTotalFees();
         if (totalFees == 0) revert InsufficientBalance();
-        
+
         uint256[4] memory shares = _calculateDistribution(totalFees);
         _processDistributions(totalFees, shares);
-        
-        delete collectedFees;
-        
+
+        delete collectedFees; //c look at this
+
         emit FeeDistributed(shares[0], shares[1], shares[2], shares[3]);
     }
 
@@ -196,18 +214,19 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param user Address of the user claiming rewards
      * @return amount Amount of rewards claimed
      */
-    function claimRewards(address user) external override nonReentrant whenNotPaused returns (uint256) {
+    function claimRewards(
+        address user
+    ) external override nonReentrant whenNotPaused returns (uint256) {
         if (user == address(0)) revert InvalidAddress();
-        
+
         uint256 pendingReward = _calculatePendingRewards(user);
         if (pendingReward == 0) revert InsufficientBalance();
-        
+
         // Reset user rewards before transfer
-        userRewards[user] = totalDistributed;
-        
+        userRewards[user] = totalDistributed; //bug REPORTED this is definitely wrong because totalDistributed is the total amount of rewards for all users. so this line is setting the user rewards to the total rewards for all users. t. this means that if a user tries to claim their rewards in a new period via the claimrewards function, if their share isnt bigger than the total distributed rewards, they will get 0 rewards. in fact, there shouldnt be any checks when the user is in a new period as they are entitled to their full shares in that period so to fix this, simply check in the claimrewards function if the blocktimestamp has gone past the end of the previous period and if it has, then dont check if the user has rewards or not. just give them their full share. if it hasnt, then check this mapping to see if their rewards are greater than the totalDistributed. it should be totaldistributed because if it was just pendingreward which is the actual user's share, if there are any rounding errors in calculating the user's share, then the user might be able to claim more rewards than they are entitled to. so for safety, it can be left as total distributed
         // Transfer rewards
         raacToken.safeTransfer(user, pendingReward);
-        
+
         emit RewardClaimed(user, pendingReward);
         return pendingReward;
     }
@@ -217,15 +236,24 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param feeType Fee type to update
      * @param newFee New fee parameters
      */
-    function updateFeeType(uint8 feeType, FeeType calldata newFee) external override {
+    function updateFeeType(
+        uint8 feeType,
+        FeeType calldata newFee
+    ) external override {
         if (!hasRole(FEE_MANAGER_ROLE, msg.sender)) revert UnauthorizedCaller();
         if (feeType > 7) revert InvalidFeeType();
-        
+
         // Validate fee shares total to 100%
-        if (newFee.veRAACShare + newFee.burnShare + newFee.repairShare + newFee.treasuryShare != BASIS_POINTS) {
+        if (
+            newFee.veRAACShare +
+                newFee.burnShare +
+                newFee.repairShare +
+                newFee.treasuryShare !=
+            BASIS_POINTS
+        ) {
             revert InvalidDistributionParams();
         }
-        
+
         feeTypes[feeType] = newFee;
         emit FeeTypeUpdated(feeType, newFee);
     }
@@ -235,14 +263,15 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param newTreasury Address of the new treasury
      */
     function setTreasury(address newTreasury) external override {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert UnauthorizedCaller();
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender))
+            revert UnauthorizedCaller();
         if (newTreasury == address(0)) revert InvalidAddress();
-        
+
         pendingTreasury = PendingUpdate({
             newAddress: newTreasury,
             effectiveTime: block.timestamp + TREASURY_UPDATE_DELAY
         });
-        
+
         emit TreasuryUpdated(newTreasury);
     }
 
@@ -251,14 +280,15 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param newRepairFund Address of the new repair fund
      */
     function setRepairFund(address newRepairFund) external override {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) revert UnauthorizedCaller();
+        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender))
+            revert UnauthorizedCaller();
         if (newRepairFund == address(0)) revert InvalidAddress();
-        
+
         pendingRepairFund = PendingUpdate({
             newAddress: newRepairFund,
             effectiveTime: block.timestamp + TREASURY_UPDATE_DELAY
         });
-        
+
         emit RepairFundUpdated(newRepairFund);
     }
 
@@ -305,8 +335,9 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      */
     function applyTreasuryUpdate() external {
         if (pendingTreasury.newAddress == address(0)) revert InvalidAddress();
-        if (block.timestamp < pendingTreasury.effectiveTime) revert UnauthorizedCaller();
-        
+        if (block.timestamp < pendingTreasury.effectiveTime)
+            revert UnauthorizedCaller();
+
         treasury = pendingTreasury.newAddress;
         delete pendingTreasury;
     }
@@ -316,8 +347,9 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      */
     function applyRepairFundUpdate() external {
         if (pendingRepairFund.newAddress == address(0)) revert InvalidAddress();
-        if (block.timestamp < pendingRepairFund.effectiveTime) revert UnauthorizedCaller();
-        
+        if (block.timestamp < pendingRepairFund.effectiveTime)
+            revert UnauthorizedCaller();
+
         repairFund = pendingRepairFund.newAddress;
         delete pendingRepairFund;
     }
@@ -330,66 +362,66 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
     function _initializeFeeTypes() internal {
         // Protocol Fees: 80% to veRAAC holders, 20% to treasury
         feeTypes[0] = FeeType({
-            veRAACShare: 8000,    // 80%
+            veRAACShare: 8000, // 80%
             burnShare: 0,
             repairShare: 0,
-            treasuryShare: 2000   // 20%
+            treasuryShare: 2000 // 20%
         });
-        
+
         // Lending Fees: Interest income distribution
         feeTypes[1] = FeeType({
-            veRAACShare: 7000,    // 70%
+            veRAACShare: 7000, // 70%
             burnShare: 0,
             repairShare: 0,
-            treasuryShare: 3000   // 30%
+            treasuryShare: 3000 // 30%
         });
-        
+
         // Performance Fees: 20% from yield products
         feeTypes[2] = FeeType({
-            veRAACShare: 6000,    // 60%
+            veRAACShare: 6000, // 60%
             burnShare: 0,
             repairShare: 0,
-            treasuryShare: 4000   // 40%
+            treasuryShare: 4000 // 40%
         });
-        
+
         // Insurance Fees: 3% from NFT loans
         feeTypes[3] = FeeType({
-            veRAACShare: 5000,    // 50%
+            veRAACShare: 5000, // 50%
             burnShare: 0,
-            repairShare: 2000,    // 20%
-            treasuryShare: 3000   // 30%
+            repairShare: 2000, // 20%
+            treasuryShare: 3000 // 30%
         });
-        
+
         // Mint/Redeem Fees
         feeTypes[4] = FeeType({
-            veRAACShare: 6000,    // 60%
+            veRAACShare: 6000, // 60%
             burnShare: 0,
-            repairShare: 2000,    // 20%
-            treasuryShare: 2000   // 20%
+            repairShare: 2000, // 20%
+            treasuryShare: 2000 // 20%
         });
-        
+
         // Vault Fees
         feeTypes[5] = FeeType({
-            veRAACShare: 7000,    // 70%
+            veRAACShare: 7000, // 70%
             burnShare: 0,
             repairShare: 0,
-            treasuryShare: 3000   // 30%
+            treasuryShare: 3000 // 30%
         });
-        
+
         // Buy/Sell Swap Tax (2% total)
         feeTypes[6] = FeeType({
-            veRAACShare: 500,     // 0.5%
-            burnShare: 500,       // 0.5%
-            repairShare: 1000,    // 1.0%
+            veRAACShare: 500, // 0.5%
+            burnShare: 500, // 0.5%
+            repairShare: 1000, // 1.0%
             treasuryShare: 0
         });
-        
+
         // NFT Royalty Fees (2% total)
         feeTypes[7] = FeeType({
-            veRAACShare: 500,     // 0.5%
+            veRAACShare: 500, // 0.5%
             burnShare: 0,
-            repairShare: 1000,    // 1.0%
-            treasuryShare: 500    // 0.5%
+            repairShare: 1000, // 1.0%
+            treasuryShare: 500 // 0.5%
         });
     }
 
@@ -398,20 +430,35 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param totalFees Total fees to distribute
      * @param shares Distribution shares for different stakeholders
      */
-    function _processDistributions(uint256 totalFees, uint256[4] memory shares) internal {
+    function _processDistributions(
+        uint256 totalFees,
+        uint256[4] memory shares
+    ) internal {
         uint256 contractBalance = raacToken.balanceOf(address(this));
-        if (contractBalance < totalFees) revert InsufficientBalance();
+        if (contractBalance < totalFees) revert InsufficientBalance(); //c if we can find a way to get total fees to be less than the contract balance, then we can trigger this error
 
         if (shares[0] > 0) {
             uint256 totalVeRAACSupply = veRAACToken.getTotalVotingPower();
             if (totalVeRAACSupply > 0) {
                 TimeWeightedAverage.createPeriod(
-                    distributionPeriod,
-                    block.timestamp + 1,
-                    7 days,
-                    shares[0],
-                    totalVeRAACSupply
-                );
+                        distributionPeriod,
+                        block.timestamp + 1,
+                        7 days,
+                        shares[0],
+                        totalVeRAACSupply
+                    ); /*c so the reason a period is created here is to make sure that the rewards are distributed over a period of time. so the rewards are not distributed all at once. so essentially, rewards are distributed every 7 days and as we have already seen, in the createPeriod function, there is the following check:
+
+                 if (
+            self.startTime != 0 &&
+            startTime < self.startTime + self.totalDuration
+        ) {
+            revert PeriodNotElapsed();
+        } 
+
+        so if anyone tries to distribute fees within a period, this function will revert with the PeriodNotElapsed custom error. This is to make sure fees can only be distributed in periods. 
+
+                */
+
                 totalDistributed += shares[0];
             } else {
                 shares[3] += shares[0]; // Add to treasury if no veRAAC holders
@@ -428,31 +475,36 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param totalFees Total fees to distribute
      * @return shares Distribution shares for different stakeholders
      */
-    function _calculateDistribution(uint256 totalFees) internal view returns (uint256[4] memory shares) {
+    function _calculateDistribution(
+        uint256 totalFees
+    ) internal view returns (uint256[4] memory shares) {
         uint256 totalCollected;
 
         for (uint8 i = 0; i < 8; i++) {
             uint256 feeAmount = _getFeeAmountByType(i);
-            if (feeAmount == 0) continue;
+            if (feeAmount == 0) continue; //c as we know, the continue statement is used to skip the current iteration of the loop and the control is passed to the next iteration of the loop. In this case, if the fee amount is 0, the loop will skip the current iteration and move to the next iteration.
 
             FeeType memory feeType = feeTypes[i];
             totalCollected += feeAmount;
-            
-            uint256 weight = (feeAmount * BASIS_POINTS) / totalFees;
+
+            uint256 weight = (feeAmount * BASIS_POINTS) / totalFees; //c so this weight takes the fee amount as a percentage of the total fees so it is asking how much of the total fees is represented by the fee amount. so think about it like fee amount/total fees * BASIS POINTS. For example, say total fees = 1000, basis points is 100 and fee amount is 10, then weight = 10/1000 * 100 = 1. so the weight is 1% of the total fees
             shares[0] += (weight * feeType.veRAACShare) / BASIS_POINTS;
+            //c so the above line then finds of how much do veRAAC holders get out of this 1% weight. so think about it like weight * veRAAC share / BASIS POINTS. so if the veRAAC share is 80, then 1 * 80 / 100 = 0.8. so the veRAAC holders get 0.8% of this fee amount which is 1% of the total fees. so at this point, the veRAAC holders get 0.008% of the total fees. this is how this calculation works
             shares[1] += (weight * feeType.burnShare) / BASIS_POINTS;
             shares[2] += (weight * feeType.repairShare) / BASIS_POINTS;
             shares[3] += (weight * feeType.treasuryShare) / BASIS_POINTS;
-        }
+        } //c this bit of code above is ripe for precision loss calculations so need to review this
 
         if (totalCollected != totalFees) revert InvalidFeeAmount();
 
         shares[0] = (totalFees * shares[0]) / BASIS_POINTS;
+        //c then this line finds out how much of the total fees each share is entitled to. so think about it like total fees * share / BASIS POINTS. following on from the above example, if veRAAC holders get 0.008% of the total fees, this is calculated here
         shares[1] = (totalFees * shares[1]) / BASIS_POINTS;
         shares[2] = (totalFees * shares[2]) / BASIS_POINTS;
         shares[3] = (totalFees * shares[3]) / BASIS_POINTS;
 
-        uint256 remainder = totalFees - (shares[0] + shares[1] + shares[2] + shares[3]);
+        uint256 remainder = totalFees -
+            (shares[0] + shares[1] + shares[2] + shares[3]);
         if (remainder > 0) shares[3] += remainder;
     }
 
@@ -461,30 +513,33 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @return total Total fees collected
      */
     function _calculateTotalFees() internal view returns (uint256) {
-        return collectedFees.protocolFees +
-               collectedFees.lendingFees +
-               collectedFees.performanceFees +
-               collectedFees.insuranceFees +
-               collectedFees.mintRedeemFees +
-               collectedFees.vaultFees +
-               collectedFees.swapTaxes +
-               collectedFees.nftRoyalties;
-    }
+        return
+            collectedFees.protocolFees +
+            collectedFees.lendingFees +
+            collectedFees.performanceFees +
+            collectedFees.insuranceFees +
+            collectedFees.mintRedeemFees +
+            collectedFees.vaultFees +
+            collectedFees.swapTaxes +
+            collectedFees.nftRoyalties;
+    } //c if i send raactokens to this contract randomly, what happens??
 
     /**
      * @dev Calculates pending rewards for a user using time-weighted average
      * @param user Address of the user
      * @return pendingAmount Amount of pending rewards
      */
-    function _calculatePendingRewards(address user) internal view returns (uint256) {
+    function _calculatePendingRewards(
+        address user
+    ) internal view returns (uint256) {
         uint256 userVotingPower = veRAACToken.getVotingPower(user);
         if (userVotingPower == 0) return 0;
 
         uint256 totalVotingPower = veRAACToken.getTotalVotingPower();
         if (totalVotingPower == 0) return 0;
-        
+
         uint256 share = (totalDistributed * userVotingPower) / totalVotingPower;
-        return share > userRewards[user] ? share - userRewards[user] : 0;
+        return share > userRewards[user] ? share - userRewards[user] : 0; //bug REPORTED see the bug i raised in the claimRewards function
     }
 
     // Add these internal functions before the view functions
@@ -503,14 +558,16 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
         else if (feeType == 5) collectedFees.vaultFees += amount;
         else if (feeType == 6) collectedFees.swapTaxes += amount;
         else if (feeType == 7) collectedFees.nftRoyalties += amount;
-    }
+    } //c should probably revert if the fee type is not valid
 
     /**
      * @dev Gets fee amount for a specific fee type
      * @param feeType Type of fee
      * @return feeAmount Amount of fee collected
      */
-    function _getFeeAmountByType(uint8 feeType) internal view returns (uint256) {
+    function _getFeeAmountByType(
+        uint8 feeType
+    ) internal view returns (uint256) {
         if (feeType == 0) return collectedFees.protocolFees;
         if (feeType == 1) return collectedFees.lendingFees;
         if (feeType == 2) return collectedFees.performanceFees;
@@ -520,7 +577,7 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
         if (feeType == 6) return collectedFees.swapTaxes;
         if (feeType == 7) return collectedFees.nftRoyalties;
         return 0;
-    }
+    } //c so all the fees are initialized and each fee has a fee type struct which contains what share should be distributed to each party. see the _initializeFeeTypes function to see the distribution
 
     // View Functions
 
@@ -529,7 +586,9 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param user Address of the user
      * @return Amount of pending rewards
      */
-    function getPendingRewards(address user) external view override returns (uint256) {
+    function getPendingRewards(
+        address user
+    ) external view override returns (uint256) {
         if (user == address(0)) revert InvalidAddress();
         return _calculatePendingRewards(user);
     }
@@ -539,7 +598,9 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @param feeType Fee type to query
      * @return FeeType struct containing fee parameters
      */
-    function getFeeType(uint8 feeType) external view override returns (FeeType memory) {
+    function getFeeType(
+        uint8 feeType
+    ) external view override returns (FeeType memory) {
         if (feeType > 7) revert InvalidFeeType();
         return feeTypes[feeType];
     }
@@ -548,7 +609,12 @@ contract FeeCollector is IFeeCollector, AccessControl, ReentrancyGuard, Pausable
      * @notice Gets all collected fees
      * @return CollectedFees struct containing all collected fees
      */
-    function getCollectedFees() external view override returns (CollectedFees memory) {
+    function getCollectedFees()
+        external
+        view
+        override
+        returns (CollectedFees memory)
+    {
         return collectedFees;
     }
 

@@ -26,9 +26,9 @@ library VotingPowerLib {
      * @dev Stores user points, checkpoints, and slope changes for power calculation
      */
     struct VotingPowerState {
-        mapping(address => RAACVoting.Point) points;           // User voting points
+        mapping(address => RAACVoting.Point) points; // User voting points
         mapping(address => Checkpoints.Checkpoint[]) checkpoints; // Historical checkpoints
-        mapping(uint256 => int128) slopeChanges;              // Slope changes at timestamps
+        mapping(uint256 => int128) slopeChanges; // Slope changes at timestamps
     }
 
     /**
@@ -37,7 +37,11 @@ library VotingPowerLib {
      * @param oldPower Previous voting power value
      * @param newPower New voting power value
      */
-    event VotingPowerUpdated(address indexed user, uint256 oldPower, uint256 newPower);
+    event VotingPowerUpdated(
+        address indexed user,
+        uint256 oldPower,
+        uint256 newPower
+    );
 
     /**
      * @notice Emitted when a checkpoint is written
@@ -45,7 +49,11 @@ library VotingPowerLib {
      * @param blockNumber Block number of the checkpoint
      * @param power Voting power at checkpoint
      */
-    event CheckpointWritten(address indexed account, uint256 blockNumber, uint256 power);
+    event CheckpointWritten(
+        address indexed account,
+        uint256 blockNumber,
+        uint256 power
+    );
 
     /**
      * @notice Thrown when attempting to query non-existent checkpoint
@@ -78,8 +86,9 @@ library VotingPowerLib {
         uint256 amount,
         uint256 unlockTime
     ) internal returns (int128 bias, int128 slope) {
-        if (amount == 0 || unlockTime <= block.timestamp) revert InvalidPowerParameters();
-        
+        if (amount == 0 || unlockTime <= block.timestamp)
+            revert InvalidPowerParameters();
+
         uint256 MAX_LOCK_DURATION = 1460 days; // 4 years
         // FIXME: Get me to uncomment me when able
         // bias = RAACVoting.calculateBias(amount, unlockTime, block.timestamp);
@@ -88,12 +97,12 @@ library VotingPowerLib {
         // Calculate initial voting power that will decay linearly to 0 at unlock time
         uint256 duration = unlockTime - block.timestamp;
         uint256 initialPower = (amount * duration) / MAX_LOCK_DURATION; // Normalize by max duration
-        
+
         bias = int128(int256(initialPower));
         slope = int128(int256(initialPower / duration)); // Power per second decay
-        
+
         uint256 oldPower = getCurrentPower(state, user, block.timestamp);
-        
+
         state.points[user] = RAACVoting.Point({
             bias: bias,
             slope: slope,
@@ -101,7 +110,7 @@ library VotingPowerLib {
         });
 
         _updateSlopeChanges(state, unlockTime, 0, slope);
-        
+
         emit VotingPowerUpdated(user, oldPower, uint256(uint128(bias)));
         return (bias, slope);
     }
@@ -125,7 +134,7 @@ library VotingPowerLib {
         if (newSlope != 0) {
             state.slopeChanges[unlockTime] += newSlope;
         }
-    }
+    } //c this is another function that doesnt really do anytthing. there is no point of tracking the user's slope changes and this function isnt really used anywhere else so any bug in this function wouldnt really matter
 
     /**
      * @notice Writes a checkpoint for voting power
@@ -140,11 +149,10 @@ library VotingPowerLib {
     ) internal {
         uint32 blockNumber = uint32(block.number);
         uint224 compressed = Checkpoints.compress(newPower);
-        
-        state.checkpoints[account].push(Checkpoints.Checkpoint({
-            fromBlock: blockNumber,
-            value: compressed
-        }));
+
+        state.checkpoints[account].push(
+            Checkpoints.Checkpoint({fromBlock: blockNumber, value: compressed})
+        );
     }
 
     /**
@@ -157,7 +165,9 @@ library VotingPowerLib {
         VotingPowerState storage state,
         address account
     ) internal view returns (Checkpoints.Checkpoint memory) {
-        Checkpoints.Checkpoint[] storage checkpoints = state.checkpoints[account];
+        Checkpoints.Checkpoint[] storage checkpoints = state.checkpoints[
+            account
+        ];
         uint256 length = checkpoints.length;
         require(length > 0, "No checkpoints for account");
         return checkpoints[length - 1];
@@ -178,8 +188,9 @@ library VotingPowerLib {
         uint256 maxBoost
     ) internal pure returns (uint256) {
         if (totalSupply == 0) return amount;
-        
-        uint256 boost = (amount * maxBoost * userBalance) / (totalSupply * 10000);
+
+        uint256 boost = (amount * maxBoost * userBalance) /
+            (totalSupply * 10000);
         return boost > amount ? boost : amount;
     }
 
@@ -197,21 +208,23 @@ library VotingPowerLib {
     ) internal view returns (uint256) {
         RAACVoting.Point memory point = state.points[account];
         if (point.timestamp == 0) return 0;
-        
+
         if (timestamp < point.timestamp) {
             return uint256(uint128(point.bias));
-        }
-        
+        } //bug this isnt correct because point.timestamp is the last recorded time a user's balance is calculated. so if the current timestamp is less than that, then the user's balance should be 0
+
         uint256 timeDelta = timestamp - point.timestamp;
-        
+
         // Calculate decay
         int128 adjustedBias = point.bias;
         if (timeDelta > 0) {
             // Calculate decay per second and multiply by time delta
-            int128 decay = (point.slope * int128(int256(timeDelta))) / int128(int256(1));
+            int128 decay = (point.slope * int128(int256(timeDelta))) /
+                int128(int256(1));
+            //q why are you diving by 1 . literally what does this add ???
             adjustedBias = point.bias - decay;
         }
-        
+
         // Return 0 if power has fully decayed
         return adjustedBias > 0 ? uint256(uint128(adjustedBias)) : 0;
     }
@@ -229,15 +242,11 @@ library VotingPowerLib {
         uint256 currentTime
     ) internal pure returns (uint256) {
         if (amount == 0 || duration == 0) return 0;
-        
+
         // Calculate unlock time from duration
         uint256 unlockTime = currentTime + duration;
         // Calculate initial bias using RAACVoting library
-        int128 bias = RAACVoting.calculateBias(
-            amount,
-            unlockTime,
-            currentTime
-        );
+        int128 bias = RAACVoting.calculateBias(amount, unlockTime, currentTime);
 
         // Convert bias to uint256, ensuring non-negative
         return bias > 0 ? uint256(uint128(bias)) : 0;
@@ -258,15 +267,18 @@ library VotingPowerLib {
     ) internal view returns (uint256) {
         RAACVoting.Point memory point = state.points[account];
         if (point.timestamp == 0) return 0;
-        
+        //c so this is saying that if the point timestamp is 0, then at this point, the user has no voting power. i.e. they have not locked any tokens
+
         if (timestamp < point.timestamp) {
             return 0;
         }
-        
+
         uint256 timeDelta = timestamp - point.timestamp;
-        
-        int128 adjustedBias = point.bias - (point.slope * int128(int256(timeDelta)));
-        
+
+        int128 adjustedBias = point.bias -
+            (point.slope * int128(int256(timeDelta)));
+
         return adjustedBias > 0 ? uint256(uint128(adjustedBias)) : 0;
+        //c this makes sense and you can see why because it follows the formula to calculate a user's voting power at any point which is uservotingpower = point.bias - rate of decay. see more in the audit notes where i go into detail about how this works but essentially the idea is that the user's balance must always tend toward 0 as time goes on. if this isnt happening, then there is a bug
     }
 }

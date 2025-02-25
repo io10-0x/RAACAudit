@@ -18,7 +18,13 @@ import "../../../interfaces/core/tokens/IRAACToken.sol";
 import "../../../interfaces/core/tokens/IRToken.sol";
 import "../../../interfaces/core/tokens/IDEToken.sol";
 
-contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, OwnableUpgradeable, PausableUpgradeable {
+contract StabilityPool is
+    IStabilityPool,
+    Initializable,
+    ReentrancyGuard,
+    OwnableUpgradeable,
+    PausableUpgradeable
+{
     using SafeERC20 for IERC20;
     using SafeERC20 for IRToken;
     using SafeERC20 for IDEToken;
@@ -75,7 +81,14 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
         address _crvUSDToken,
         address _lendingPool
     ) public initializer {
-        if (_rToken == address(0) || _deToken == address(0) || _raacToken == address(0) || _raacMinter == address(0) || _crvUSDToken == address(0) || _lendingPool == address(0)) revert InvalidAddress();
+        if (
+            _rToken == address(0) ||
+            _deToken == address(0) ||
+            _raacToken == address(0) ||
+            _raacMinter == address(0) ||
+            _crvUSDToken == address(0) ||
+            _lendingPool == address(0)
+        ) revert InvalidAddress();
         __Ownable_init(_initialOwner);
         __Pausable_init();
         rToken = IRToken(_rToken);
@@ -107,7 +120,8 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
     }
 
     modifier onlyManagerOrOwner() {
-    if (!managers[msg.sender] && msg.sender != owner()) revert UnauthorizedAccess();
+        if (!managers[msg.sender] && msg.sender != owner())
+            revert UnauthorizedAccess();
         _;
     }
 
@@ -116,7 +130,10 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param manager Address of the manager to add.
      * @param allocation Allocation amount for the manager.
      */
-    function addManager(address manager, uint256 allocation) external onlyOwner validAmount(allocation) {
+    function addManager(
+        address manager,
+        uint256 allocation
+    ) external onlyOwner validAmount(allocation) {
         if (managers[manager]) revert ManagerAlreadyExists();
         managers[manager] = true;
         managerAllocation[manager] = allocation;
@@ -143,9 +160,15 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param manager Address of the manager.
      * @param newAllocation New allocation amount.
      */
-    function updateAllocation(address manager, uint256 newAllocation) external onlyOwner validAmount(newAllocation) {
+    function updateAllocation(
+        address manager,
+        uint256 newAllocation
+    ) external onlyOwner validAmount(newAllocation) {
         if (!managers[manager]) revert ManagerNotFound();
-        totalAllocation = totalAllocation - managerAllocation[manager] + newAllocation;
+        totalAllocation =
+            totalAllocation -
+            managerAllocation[manager] +
+            newAllocation;
         managerAllocation[manager] = newAllocation;
         emit AllocationUpdated(manager, newAllocation);
     }
@@ -171,14 +194,20 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @notice Allows a user to deposit rToken and receive deToken.
      * @param amount Amount of rToken to deposit.
      */
-    function deposit(uint256 amount) external nonReentrant whenNotPaused validAmount(amount) {
+    function deposit(
+        //c this detoken is different from the debt token in the lending pool. this is a different token. it is supposed to be a 1:1 representation of the rtoken deposited.
+
+        //c looking at DEtoken.sol, all the transfer functions are restricted to the stability pool which has no functions that ever call transfer so as it stands, there is no way to transfer DE tokens. NEED TO ASK ABOUT THIS
+        uint256 amount
+    ) external nonReentrant whenNotPaused validAmount(amount) {
+        //c a1 valid amount modifier assumes 0 is the only invalid amount. NEED TO TEST DIFFERENT DEPOSIT AMOUNTS AND OBSERVE THE BEHAVIOUR
         _update();
         rToken.safeTransferFrom(msg.sender, address(this), amount);
         uint256 deCRVUSDAmount = calculateDeCRVUSDAmount(amount);
-        deToken.mint(msg.sender, deCRVUSDAmount);
+        deToken.mint(msg.sender, deCRVUSDAmount); //c doesnt follow CEI methodology and even though it has nonReentrant modifier, i can probably perform cross function / cross contract reentrancy. NEED TO LOOK INTO THIS
 
         userDeposits[msg.sender] += amount;
-        _mintRAACRewards();
+        _mintRAACRewards(); //q is there any reason why raac rewards are minted twice ?? I have looked at what this function does and it doesnt seem to me like there should be any valid reason for this to be happening because this secodn call wont actually do anything because it is in the same transaction, the block.timestamp will be the same and so will the block.number which are the 2 key factors that determine whether anything happens in this function.
 
         emit Deposit(msg.sender, amount, deCRVUSDAmount);
     }
@@ -188,9 +217,13 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param rcrvUSDAmount Amount of rToken deposited.
      * @return Amount of deToken to mint.
      */
-    function calculateDeCRVUSDAmount(uint256 rcrvUSDAmount) public view returns (uint256) {
-        uint256 scalingFactor = 10**(18 + deTokenDecimals - rTokenDecimals);
+    function calculateDeCRVUSDAmount(
+        uint256 rcrvUSDAmount
+    ) public view returns (uint256) {
+        uint256 scalingFactor = 10 ** (18 + deTokenDecimals - rTokenDecimals);
         return (rcrvUSDAmount * scalingFactor) / getExchangeRate();
+
+        //c there really is no need for all of this extra math. the idea is to mint rtoken to DE token 1:1 so all they had to do was in stabilitypool::deposit, mint the same amount of rtokens like whats the point of all this because detokendecimals is 18 and so is rtoken decimals so really this is unnecessary math and just welcomes precision loss which i am going to test for actually
     }
 
     /**
@@ -198,9 +231,13 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param deCRVUSDAmount Amount of deToken to redeem.
      * @return Amount of rToken to return.
      */
-    function calculateRcrvUSDAmount(uint256 deCRVUSDAmount) public view returns (uint256) {
-        uint256 scalingFactor = 10**(18 + rTokenDecimals - deTokenDecimals);
+    function calculateRcrvUSDAmount(
+        uint256 deCRVUSDAmount
+    ) public view returns (uint256) {
+        uint256 scalingFactor = 10 ** (18 + rTokenDecimals - deTokenDecimals);
         return (deCRVUSDAmount * getExchangeRate()) / scalingFactor;
+
+        //c already spoke on how useless this math is in the calculatedecrvusdamount function
     }
 
     /**
@@ -221,13 +258,24 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @notice Allows a user to withdraw their rToken and RAAC rewards.
      * @param deCRVUSDAmount Amount of deToken to redeem.
      */
-    function withdraw(uint256 deCRVUSDAmount) external nonReentrant whenNotPaused validAmount(deCRVUSDAmount) {
+    function withdraw(
+        uint256 deCRVUSDAmount
+    ) external nonReentrant whenNotPaused validAmount(deCRVUSDAmount) {
+        //c a1 assumes that 0 is the only invalid amount. can i enter an amount that can cause this revert
+        //c on first glance, it looks like the user can only get their RAAC rewards by withdrawing from the stability pool. will edit if something changes in review
+
+        //c so the idea is that once a user deposits rtokens in the stability pool, these tokens no longer accrue interest and are exchanged 1:1 for detokens which make the user eligible for RAAC token rewards
         _update();
-        if (deToken.balanceOf(msg.sender) < deCRVUSDAmount) revert InsufficientBalance();
+        if (deToken.balanceOf(msg.sender) < deCRVUSDAmount)
+            revert InsufficientBalance();
 
         uint256 rcrvUSDAmount = calculateRcrvUSDAmount(deCRVUSDAmount);
         uint256 raacRewards = calculateRaacRewards(msg.sender);
-        if (userDeposits[msg.sender] < rcrvUSDAmount) revert InsufficientBalance();
+        if (userDeposits[msg.sender] < rcrvUSDAmount)
+            revert InsufficientBalance();
+        //c so if precision loss causes a slight deviation from this math, it could prevent a user from withdrawing, need to see if this is exploitable
+
+        //bug if a user transfers their de tokens from a compromised EOA for example, this means that the user wont be able to redeem their rtoken and raac rewards even though they own the token. DE tokens can only be transferred by the stability pool which doesnt really make much sense because there is no function in this stability pool that allows for the transfer of DE tokens. NEED TO ASK ABOUT THIS
         userDeposits[msg.sender] -= rcrvUSDAmount;
 
         if (userDeposits[msg.sender] == 0) {
@@ -252,10 +300,12 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
         uint256 userDeposit = userDeposits[user];
         uint256 totalDeposits = deToken.totalSupply();
 
+        //bug REPORTED stepwise jumps can lead to reward front run. if i am watching this protocol and see that raac rewards havent been deposited or withdrawn for a while which are the 2 functions that mint raac rewards, then an attacker can deposit a large amount of rtokens just before a user calls withdraw and then get a large share of their rewards without having to deposit for as long as they have and then can just withdraw after them and get similar/more rewards
+
         uint256 totalRewards = raacToken.balanceOf(address(this));
         if (totalDeposits < 1e6) return 0;
 
-        return (totalRewards * userDeposit) / totalDeposits;
+        return (totalRewards * userDeposit) / totalDeposits; //q possible rounding error here? cant seem to find one. i tried to test this in StabilityPool.test.js but the difference was about 1 wei which is kinda insignificant. see "precision loss checks" in the test file
     }
 
     /**
@@ -264,7 +314,7 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @return Amount of pending RAAC rewards.
      */
     function getPendingRewards(address user) external view returns (uint256) {
-        return calculateRaacRewards(user);
+        return calculateRaacRewards(user); //bug this is outdated as if blocks have passed since the last update, the rewards will not be up to date. this is a possibly a low and worth bringing up in the audit
     }
 
     /**
@@ -272,7 +322,9 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param manager Address of the manager.
      * @return Allocation amount.
      */
-    function getManagerAllocation(address manager) external view returns (uint256) {
+    function getManagerAllocation(
+        address manager
+    ) external view returns (uint256) {
         return managerAllocation[manager];
     }
 
@@ -323,7 +375,9 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @notice Deposits RAAC tokens from the liquidity pool.
      * @param amount Amount of RAAC tokens to deposit.
      */
-    function depositRAACFromPool(uint256 amount) external onlyLiquidityPool validAmount(amount) {
+    function depositRAACFromPool(
+        uint256 amount
+    ) external onlyLiquidityPool validAmount(amount) {
         uint256 preBalance = raacToken.balanceOf(address(this));
 
         raacToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -346,7 +400,7 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
             if (managerList[i] == manager) {
                 return i;
             }
-        }
+        } //c could maybe be an unbounded for loop that can cause gas griefing BUT the managers list is obviously bounded the number of managers that the owner wants to add so it is safe to assume they arent going to bombard the contract with managers to fcause gas griefing
         revert ManagerNotFound();
     }
 
@@ -355,7 +409,10 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param market Address of the market to add.
      * @param allocation Allocation amount for the market.
      */
-    function addMarket(address market, uint256 allocation) external onlyOwner validAmount(allocation) {
+    function addMarket(
+        address market,
+        uint256 allocation
+    ) external onlyOwner validAmount(allocation) {
         if (supportedMarkets[market]) revert MarketAlreadyExists();
         supportedMarkets[market] = true;
         marketAllocations[market] = allocation;
@@ -380,9 +437,15 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @param market Address of the market.
      * @param newAllocation New allocation amount.
      */
-    function updateMarketAllocation(address market, uint256 newAllocation) external onlyOwner validAmount(newAllocation) {
+    function updateMarketAllocation(
+        address market,
+        uint256 newAllocation
+    ) external onlyOwner validAmount(newAllocation) {
         if (!supportedMarkets[market]) revert MarketNotFound();
-        totalAllocation = totalAllocation - marketAllocations[market] + newAllocation;
+        totalAllocation =
+            totalAllocation -
+            marketAllocations[market] +
+            newAllocation;
         marketAllocations[market] = newAllocation;
         emit MarketAllocationUpdated(market, newAllocation);
     }
@@ -407,7 +470,9 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      */
     function getTotalDeposits() external view returns (uint256) {
         return rToken.balanceOf(address(this));
-    }
+    } //c similar idea to the debttoken, when rtoken is sent to rtoken contract, the normalized amount is sent so when balanceOf is called, it returns the normalized amount
+
+    //c i was going to raise that people could send rtokens directly to the stability pool and be able to skew this totaldeposits value and be able to mess with emission rate but in reality, the only incentive for anyone to do this would be to deter people from depositing into the stability pool and the only reason they would want to do that is if they want to gain the rewards for themselves but if they do this, they would be messing up the emission rates for themselves which doesnt make sense to do
 
     /**
      * @notice Gets the balance of a user.
@@ -428,15 +493,16 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
         if (managerIndex != lastIndex) {
             managerList[managerIndex] = managerList[lastIndex];
         }
-        managerList.pop();
+        managerList.pop(); //c this seems to work but to avoid issues,  can  easily use an enumerable set instead of having parallel data structures
     }
 
     /**
      * @dev Internal function to update state variables.
      */
     function _update() internal {
-       _mintRAACRewards();
+        _mintRAACRewards();
     }
+
     /**
      * @notice Liquidates a borrower's position.
      * @dev This function can only be called by a manager or the owner when the contract is not paused.
@@ -446,22 +512,59 @@ contract StabilityPool is IStabilityPool, Initializable, ReentrancyGuard, Ownabl
      * @custom:throws ApprovalFailed If the approval of crvUSD transfer to LendingPool fails.
      * @custom:emits BorrowerLiquidated when the liquidation is successful.
      */
-    function liquidateBorrower(address userAddress) external onlyManagerOrOwner nonReentrant whenNotPaused {
+    function liquidateBorrower(
+        address userAddress
+    ) external onlyManagerOrOwner nonReentrant whenNotPaused {
         _update();
+
         // Get the user's debt from the LendingPool.
         uint256 userDebt = lendingPool.getUserDebt(userAddress);
-        uint256 scaledUserDebt = WadRayMath.rayMul(userDebt, lendingPool.getNormalizedDebt());
+        //c a1: assumes that the user debt is correctly calculated by the lending pool. this checks out
+        uint256 scaledUserDebt = WadRayMath.rayMul(
+            userDebt,
+            lendingPool.getNormalizedDebt()
+        );
+        //bug REPORTED the line above multiplies the user debt by the normalized debt (usage index) twice. LendingPool::getUserDebt already multiplies the normalized user debt by the usage index which gives us the actual debt of the user and accounts for interest accrued so this line above just messes up a lot of things
+
+        //c assumes the raymul calculation is correct and correctly multiplies the user debt by the normalized debt without precision issues. THIS CAN BE EXPLORED MORE but so far it seems to be correct
 
         if (userDebt == 0) revert InvalidAmount();
 
         uint256 crvUSDBalance = crvUSDToken.balanceOf(address(this));
         if (crvUSDBalance < scaledUserDebt) revert InsufficientBalance();
+        /*bug REPORTED in LendingPool::finalizeLiquidation, which this function calls below,  it contains the following line:
+
+         // Transfer reserve assets from Stability Pool to cover the debt
+        IERC20(reserve.reserveAssetAddress).safeTransferFrom(
+            msg.sender,
+            reserve.reserveRTokenAddress,
+            amountScaled
+        );
+
+        so it transfer's whatever the reserve asset is from LendingPool.sol from this stability pool to the reserveRTokenAddress which is the Rtoken contract. If the reserveassetaddress is not crvUSD, then the above check for the crvUSDbalance is irrelevant and the liquidation will revert which we don't want. 
+
+        This would be ok if the reserve asset was always crvUSD but it may not always be. This is the word from the devs from question i asked in a private thread. 
+
+    That said, we hope to be able to reuse the exact same contract for most of other erc20 (those with custom logics would draw a modified lending pool contract to do that, but all the "classic" erc20 should fit in the pool). So for the pool, still a crvUSD at launch yes, but the same pool is supposed to be reused for other stables. 
+
+    So they intend to use this same lending pool logic for other stablecoins in the future and there is no mention of using a different stability pool. This is a big risk because if the reserve asset is not crvUSD, then the liquidation will revert and the user will not be liquidated. So, reserve.reserveAssetAddress can be any stablecoin address and if it is not crvUSD, then the liquidation will revert. This is a big risk and should be fixed.
+
+    to fix this, you should have a getter function in the lending pool to get what the reserve asset address is and return it. so in this function, the stability pool can call this getter function to get whatever the reserve asset address is and then check the stability pool's balance of that asset and then check if it is greater than the scaled user debt. if it is, then the liquidation can proceed. if it is not, then the liquidation should revert. this is the fix for this bug.
+        
+        */
+
+        //c There is nowhere in the stability pool where the crvUSD token is sent to the stability pool so where does the crvUSD token come from? This is what the devs said It will be RAAC to provide crvUSD since it will be purchasing the liquidated NFTs off and clear the debt in the system
 
         // Approve the LendingPool to transfer the debt amount
-        bool approveSuccess = crvUSDToken.approve(address(lendingPool), scaledUserDebt);
+        bool approveSuccess = crvUSDToken.approve(
+            address(lendingPool),
+            scaledUserDebt
+        );
+        //c a3: assumes that the approve function works as expected and there are no weird approve functions that dont allow partial allowances like usdt. I have looked at the crvusd contract at https://etherscan.io/address/0xf939e0a03fb07f59a73314e73794be0e57ac1b4e#code and it doesnt look like theres many issues with this
         if (!approveSuccess) revert ApprovalFailed();
         // Update lending pool state before liquidation
         lendingPool.updateState();
+        //c a4: assumes that the approve function in crvusd returns true and it does so this checks out
 
         // Call finalizeLiquidation on LendingPool
         lendingPool.finalizeLiquidation(userAddress);

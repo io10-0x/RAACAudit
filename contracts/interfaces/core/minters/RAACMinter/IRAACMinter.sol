@@ -92,7 +92,10 @@ interface IRAACMinter {
      * @param updateLastBlock If true, updates the lastUpdateBlock
      * @param newLastUpdateBlock New value for lastUpdateBlock, if 0 current block number is used
      */
-    function emergencyShutdown(bool updateLastBlock, uint256 newLastUpdateBlock) external;
+    function emergencyShutdown(
+        bool updateLastBlock,
+        uint256 newLastUpdateBlock
+    ) external;
 
     /* ========== EVENTS ========== */
 
@@ -133,7 +136,10 @@ interface IRAACMinter {
      * @param newOwner Address of proposed new owner
      * @param effectiveTime Timestamp when transfer becomes effective
      */
-    event RAACTokenOwnershipTransferInitiated(address indexed newOwner, uint256 effectiveTime);
+    event RAACTokenOwnershipTransferInitiated(
+        address indexed newOwner,
+        uint256 effectiveTime
+    );
 
     /**
      * @notice Emitted when RAAC token ownership is transferred
@@ -181,7 +187,10 @@ interface IRAACMinter {
      * @param oldInterval Previous update interval
      * @param newInterval New update interval
      */
-    event EmissionUpdateIntervalUpdated(uint256 oldInterval, uint256 newInterval);
+    event EmissionUpdateIntervalUpdated(
+        uint256 oldInterval,
+        uint256 newInterval
+    );
 
     /* ========== ERRORS ========== */
 

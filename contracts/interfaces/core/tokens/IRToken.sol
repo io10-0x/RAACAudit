@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @dev Extends the IERC20 interface and includes minting and burning functionalities restricted to designated roles.
  */
 interface IRToken is IERC20 {
-
     /**
      * @notice Mints RToken to a user
      * @param caller The address initiating the mint
@@ -115,16 +114,19 @@ interface IRToken is IERC20 {
      * @return The amount of dust in the contract
      * @dev Dust is the difference between actual contract balance and total real obligations to token holders
      */
-    function calculateDustAmount() external view returns (uint256);
+    function calculateDustAmount() external view returns (uint256); //c this should be view but i changed it for testing purposes
 
-       // EVENTS
+    // EVENTS
 
     /**
      * @notice Emitted when the Reserve Pool address is updated
      * @param oldReservePool The old Reserve Pool address
      * @param newReservePool The new Reserve Pool address
      */
-    event ReservePoolUpdated(address indexed oldReservePool, address indexed newReservePool);
+    event ReservePoolUpdated(
+        address indexed oldReservePool,
+        address indexed newReservePool
+    );
 
     /**
      * @notice Emitted when the liquidity index is updated
@@ -139,7 +141,12 @@ interface IRToken is IERC20 {
      * @param amount The amount minted (in underlying asset units)
      * @param index The liquidity index at the time of minting
      */
-    event Mint(address indexed caller, address indexed onBehalfOf, uint256 amount, uint256 index);
+    event Mint(
+        address indexed caller,
+        address indexed onBehalfOf,
+        uint256 amount,
+        uint256 index
+    );
 
     /**
      * @notice Emitted when tokens are burned
@@ -148,7 +155,12 @@ interface IRToken is IERC20 {
      * @param amount The amount burned (in underlying asset units)
      * @param index The liquidity index at the time of burning
      */
-    event Burn(address indexed from, address indexed receiverOfUnderlying, uint256 amount, uint256 index);
+    event Burn(
+        address indexed from,
+        address indexed receiverOfUnderlying,
+        uint256 amount,
+        uint256 index
+    );
 
     /**
      * @notice Emitted during a token transfer
@@ -157,12 +169,17 @@ interface IRToken is IERC20 {
      * @param value The amount transferred (in scaled units)
      * @param index The liquidity index at the time of transfer
      */
-    event BalanceTransfer(address indexed from, address indexed to, uint256 value, uint256 index);
+    event BalanceTransfer(
+        address indexed from,
+        address indexed to,
+        uint256 value,
+        uint256 index
+    );
 
     /**
      * @notice Emitted when the burner address is set
      * @param burner The address of the burner
-     */ 
+     */
     event BurnerSet(address indexed burner);
 
     /**
@@ -170,7 +187,7 @@ interface IRToken is IERC20 {
      * @param minter The address of the minter
      */
     event MinterSet(address indexed minter);
-   
+
     /**
      * @notice Emitted when the only reserve pool modifier is not met
      */
@@ -197,5 +214,4 @@ interface IRToken is IERC20 {
      * @param amount The amount of dust transferred
      */
     event DustTransferred(address indexed recipient, uint256 amount);
-
 }

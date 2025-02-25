@@ -10,14 +10,16 @@ describe("ReserveLibrary", function () {
     [owner, user1] = await ethers.getSigners();
 
     // Deploy the ReserveLibraryMock contract
-    const ReserveLibraryMockFactory = await ethers.getContractFactory("ReserveLibraryMock");
+    const ReserveLibraryMockFactory = await ethers.getContractFactory(
+      "ReserveLibraryMock"
+    );
     reserveLibrary = await ReserveLibraryMockFactory.deploy();
   });
 
   describe("Deposit and Withdrawal Functionality", function () {
     it("should correctly update totalLiquidity after a deposit", async function () {
       const depositAmount = ethers.parseEther("1");
-      
+
       const initialData = await reserveLibrary.getReserveData();
       expect(initialData.totalLiquidity).to.equal(0);
 
@@ -39,19 +41,23 @@ describe("ReserveLibrary", function () {
 
       // totalLiquidity should now equal depositAmount - withdrawAmount
       const reserveDataAfterWithdrawal = await reserveLibrary.getReserveData();
-      expect(reserveDataAfterWithdrawal.totalLiquidity).to.equal(depositAmount - withdrawAmount);
+      expect(reserveDataAfterWithdrawal.totalLiquidity).to.equal(
+        depositAmount - withdrawAmount
+      );
     });
 
     it("should handle zero deposit amount correctly", async function () {
       const zeroAmount = ethers.parseEther("0");
-      await expect(reserveLibrary.deposit(zeroAmount))
-        .to.be.revertedWithCustomError(reserveLibrary, "InvalidAmount");
+      await expect(
+        reserveLibrary.deposit(zeroAmount)
+      ).to.be.revertedWithCustomError(reserveLibrary, "InvalidAmount");
     });
 
     it("should handle zero withdrawal amount correctly", async function () {
       const zeroAmount = ethers.parseEther("0");
-      await expect(reserveLibrary.withdraw(zeroAmount))
-        .to.be.revertedWithCustomError(reserveLibrary, "InvalidAmount");
+      await expect(
+        reserveLibrary.withdraw(zeroAmount)
+      ).to.be.revertedWithCustomError(reserveLibrary, "InvalidAmount");
     });
 
     it("should not allow withdrawing more than totalLiquidity", async function () {
@@ -60,8 +66,9 @@ describe("ReserveLibrary", function () {
 
       await reserveLibrary.deposit(depositAmount);
 
-      await expect(reserveLibrary.withdraw(withdrawAmount))
-        .to.be.revertedWithCustomError(reserveLibrary, "InsufficientLiquidity");
+      await expect(
+        reserveLibrary.withdraw(withdrawAmount)
+      ).to.be.revertedWithCustomError(reserveLibrary, "InsufficientLiquidity");
     });
 
     it("should handle large deposit amounts without overflow", async function () {
@@ -80,32 +87,32 @@ describe("ReserveLibrary", function () {
     it("should handle setting an excessively high prime rate", async function () {
       // First set up valid initial rates
       await reserveLibrary.setRateParameters(
-        ethers.parseEther("0.05"),  // baseRate (5%)
-        ethers.parseEther("0.10"),  // primeRate (10%)
-        ethers.parseEther("0.15"),  // optimalRate (15%)
-        ethers.parseEther("1.0"),   // maxRate (100%)
-        ethers.parseEther("0.5")    // optimalUtilizationRate (50%)
+        ethers.parseEther("0.05"), // baseRate (5%)
+        ethers.parseEther("0.10"), // primeRate (10%)
+        ethers.parseEther("0.15"), // optimalRate (15%)
+        ethers.parseEther("1.0"), // maxRate (100%)
+        ethers.parseEther("0.5") // optimalUtilizationRate (50%)
       );
 
       // Get initial state
       const initialRateData = await reserveLibrary.getRateData();
-      
+
       // Set an extremely high prime rate (1000%)
       const highPrimeRate = ethers.parseEther("10");
-      
+
       // For extremely high rates, we need to adjust other rates first
       await reserveLibrary.setRateParameters(
-        highPrimeRate / 2n,         // baseRate (500%)
-        highPrimeRate,                // primeRate (1000%)
-        highPrimeRate * 3n / 4n,  // optimalRate (750%)
-        highPrimeRate * 2n,         // maxRate (2000%)
-        ethers.parseEther("0.5")      // keep optimal utilization at 50%
+        highPrimeRate / 2n, // baseRate (500%)
+        highPrimeRate, // primeRate (1000%)
+        (highPrimeRate * 3n) / 4n, // optimalRate (750%)
+        highPrimeRate * 2n, // maxRate (2000%)
+        ethers.parseEther("0.5") // keep optimal utilization at 50%
       );
-      
+
       // Verify the new prime rate was set
       const finalRateData = await reserveLibrary.getRateData();
       expect(finalRateData.primeRate).to.equal(highPrimeRate);
-      
+
       // Verify the relationships between rates are maintained
       expect(finalRateData.baseRate).to.be.lt(finalRateData.primeRate);
       expect(finalRateData.primeRate).to.be.lt(finalRateData.maxRate);
@@ -137,8 +144,23 @@ describe("ReserveLibrary", function () {
 
     it("should not allow zero or negative prime rates", async function () {
       const zeroRate = 0;
-      await expect(reserveLibrary.setPrimeRate(zeroRate))
-        .to.be.revertedWithCustomError(reserveLibrary, "PrimeRateMustBePositive");
+      await expect(
+        reserveLibrary.setPrimeRate(zeroRate)
+      ).to.be.revertedWithCustomError(
+        reserveLibrary,
+        "PrimeRateMustBePositive"
+      );
+    });
+
+    it("mathtest", async function () {
+      //c for testing purposes
+      const rateData = await reserveLibrary.getRateData();
+      const data = await reserveLibrary.ratepersecondcomparison(
+        rateData.baseRate,
+        1
+      );
+      console.log(rateData.baseRate);
+      console.log(data);
     });
   });
 });

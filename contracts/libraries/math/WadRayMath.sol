@@ -12,128 +12,139 @@ pragma solidity ^0.8.0;
  * @dev Operations are rounded. If a value is >=.5, will be rounded up, otherwise rounded down.
  */
 library WadRayMath {
-  // HALF_WAD and HALF_RAY expressed with extended notation as constant with operations are not supported in Yul assembly
-  uint256 internal constant WAD = 1e18;
-  uint256 internal constant HALF_WAD = 0.5e18;
+    // HALF_WAD and HALF_RAY expressed with extended notation as constant with operations are not supported in Yul assembly
+    uint256 internal constant WAD = 1e18;
+    uint256 internal constant HALF_WAD = 0.5e18;
 
-  uint256 internal constant RAY = 1e27;
-  uint256 internal constant HALF_RAY = 0.5e27;
+    uint256 internal constant RAY = 1e27;
+    uint256 internal constant HALF_RAY = 0.5e27;
 
-  uint256 internal constant WAD_RAY_RATIO = 1e9;
+    uint256 internal constant WAD_RAY_RATIO = 1e9;
 
-  uint256 internal constant SECONDS_PER_YEAR = 365 days;
-  /**
-   * @dev Multiplies two wad, rounding half up to the nearest wad
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Wad
-   * @param b Wad
-   * @return c = a*b, in wad
-   */
-  function wadMul(uint256 a, uint256 b) internal pure returns (uint256 c) {
-    // to avoid overflow, a <= (type(uint256).max - HALF_WAD) / b
-    assembly {
-      if iszero(or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_WAD), b))))) {
-        revert(0, 0)
-      }
+    uint256 internal constant SECONDS_PER_YEAR = 365 days;
 
-      c := div(add(mul(a, b), HALF_WAD), WAD)
+    /**
+     * @dev Multiplies two wad, rounding half up to the nearest wad
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Wad
+     * @param b Wad
+     * @return c = a*b, in wad
+     */
+    function wadMul(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        // to avoid overflow, a <= (type(uint256).max - HALF_WAD) / b
+        assembly {
+            if iszero(
+                or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_WAD), b))))
+            ) {
+                revert(0, 0)
+            }
+
+            c := div(add(mul(a, b), HALF_WAD), WAD)
+        }
     }
-  }
 
-  /**
-   * @dev Divides two wad, rounding half up to the nearest wad
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Wad
-   * @param b Wad
-   * @return c = a/b, in wad
-   */
-  function wadDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
-    // to avoid overflow, a <= (type(uint256).max - halfB) / WAD
-    assembly {
-      if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), WAD))))) {
-        revert(0, 0)
-      }
+    /**
+     * @dev Divides two wad, rounding half up to the nearest wad
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Wad
+     * @param b Wad
+     * @return c = a/b, in wad
+     */
+    function wadDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        // to avoid overflow, a <= (type(uint256).max - halfB) / WAD
+        assembly {
+            if or(
+                iszero(b),
+                iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), WAD))))
+            ) {
+                revert(0, 0)
+            }
 
-      c := div(add(mul(a, WAD), div(b, 2)), b)
+            c := div(add(mul(a, WAD), div(b, 2)), b)
+        }
     }
-  }
 
-  /**
-   * @notice Multiplies two ray, rounding half up to the nearest ray
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Ray
-   * @param b Ray
-   * @return c = a raymul b
-   */
-  function rayMul(uint256 a, uint256 b) internal pure returns (uint256 c) {
-    // to avoid overflow, a <= (type(uint256).max - HALF_RAY) / b
-    assembly {
-      if iszero(or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_RAY), b))))) {
-        revert(0, 0)
-      }
+    /**
+     * @notice Multiplies two ray, rounding half up to the nearest ray
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Ray
+     * @param b Ray
+     * @return c = a raymul b
+     */
+    function rayMul(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        // to avoid overflow, a <= (type(uint256).max - HALF_RAY) / b
+        assembly {
+            if iszero(
+                or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_RAY), b))))
+            ) {
+                revert(0, 0)
+            }
 
-      c := div(add(mul(a, b), HALF_RAY), RAY)
+            c := div(add(mul(a, b), HALF_RAY), RAY)
+        }
+    } //c the reason why HALF_RAY is added to the numerator is to round up the result of the multiplication to the nearest ray as seen in the natspec
+
+    /**
+     * @notice Divides two ray, rounding half up to the nearest ray
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Ray
+     * @param b Ray
+     * @return c = a raydiv b
+     */
+    function rayDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        // to avoid overflow, a <= (type(uint256).max - halfB) / RAY
+        assembly {
+            if or(
+                iszero(b),
+                iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), RAY))))
+            ) {
+                revert(0, 0)
+            }
+
+            c := div(add(mul(a, RAY), div(b, 2)), b)
+        }
     }
-  }
 
-  /**
-   * @notice Divides two ray, rounding half up to the nearest ray
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Ray
-   * @param b Ray
-   * @return c = a raydiv b
-   */
-  function rayDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
-    // to avoid overflow, a <= (type(uint256).max - halfB) / RAY
-    assembly {
-      if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), RAY))))) {
-        revert(0, 0)
-      }
-
-      c := div(add(mul(a, RAY), div(b, 2)), b)
+    /**
+     * @dev Casts ray down to wad
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Ray
+     * @return b = a converted to wad, rounded half up to the nearest wad
+     */
+    function rayToWad(uint256 a) internal pure returns (uint256 b) {
+        assembly {
+            b := div(a, WAD_RAY_RATIO)
+            let remainder := mod(a, WAD_RAY_RATIO)
+            if iszero(lt(remainder, div(WAD_RAY_RATIO, 2))) {
+                b := add(b, 1)
+            }
+        }
     }
-  }
 
-  /**
-   * @dev Casts ray down to wad
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Ray
-   * @return b = a converted to wad, rounded half up to the nearest wad
-   */
-  function rayToWad(uint256 a) internal pure returns (uint256 b) {
-    assembly {
-      b := div(a, WAD_RAY_RATIO)
-      let remainder := mod(a, WAD_RAY_RATIO)
-      if iszero(lt(remainder, div(WAD_RAY_RATIO, 2))) {
-        b := add(b, 1)
-      }
+    /**
+     * @dev Converts wad up to ray
+     * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
+     * @param a Wad
+     * @return b = a converted in ray
+     */
+    function wadToRay(uint256 a) internal pure returns (uint256 b) {
+        // to avoid overflow, b/WAD_RAY_RATIO == a
+        assembly {
+            b := mul(a, WAD_RAY_RATIO)
+
+            if iszero(eq(div(b, WAD_RAY_RATIO), a)) {
+                revert(0, 0)
+            }
+        }
     }
-  }
 
-  /**
-   * @dev Converts wad up to ray
-   * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
-   * @param a Wad
-   * @return b = a converted in ray
-   */
-  function wadToRay(uint256 a) internal pure returns (uint256 b) {
-    // to avoid overflow, b/WAD_RAY_RATIO == a
-    assembly {
-      b := mul(a, WAD_RAY_RATIO)
-
-      if iszero(eq(div(b, WAD_RAY_RATIO), a)) {
-        revert(0, 0)
-      }
-    }
-  }
-
-  /**
-   * @dev Calculates the power of a ray, rounding half up to the nearest ray
-   * @param x Ray
-   * @param n Exponent
-   * @return z = x^n, in ray
-   */
-  function rayPow(uint256 x, uint256 n) internal pure returns (uint256 z) {
+    /**
+     * @dev Calculates the power of a ray, rounding half up to the nearest ray
+     * @param x Ray
+     * @param n Exponent
+     * @return z = x^n, in ray
+     */
+    function rayPow(uint256 x, uint256 n) internal pure returns (uint256 z) {
         z = n % 2 != 0 ? x : WadRayMath.RAY;
         for (n /= 2; n != 0; n /= 2) {
             x = rayMul(x, x);
@@ -149,10 +160,10 @@ library WadRayMath {
      * @return z = e^x, in ray
      */
     function rayExp(uint256 x) internal pure returns (uint256 z) {
-        if(x == 0) {
+        if (x == 0) {
             return WadRayMath.RAY;
         }
-        
+
         // Compute e^x, where x is in ray units (scaled by 1e27)
         // assembly implementation for maximum gas efficiency
         // Using a fixed number of terms for the Taylor series expansion

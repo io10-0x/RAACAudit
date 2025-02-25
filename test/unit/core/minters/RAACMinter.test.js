@@ -17,7 +17,9 @@ describe("RAACMinter", function () {
     lendingPool = await MockLendingPool.deploy();
 
     MockStabilityPool = await ethers.getContractFactory("MockStabilityPool");
-    stabilityPool = await MockStabilityPool.deploy(await raacToken.getAddress());
+    stabilityPool = await MockStabilityPool.deploy(
+      await raacToken.getAddress()
+    );
 
     RAACMinter = await ethers.getContractFactory("RAACMinter");
     raacMinter = await RAACMinter.deploy(
@@ -30,7 +32,7 @@ describe("RAACMinter", function () {
     await raacToken.setMinter(await raacMinter.getAddress());
   });
 
-  it('should have initial emission rate', async function () {
+  it("should have initial emission rate", async function () {
     const initialEmissionRate = await raacMinter.emissionRate();
     expect(initialEmissionRate).to.not.equal(0);
     expect(initialEmissionRate).to.equal(138888888888888888n);
@@ -77,73 +79,89 @@ describe("RAACMinter", function () {
   });
 
   it("should not allow non-owner to set parameters", async function () {
-    await expect(raacMinter.connect(user1).setMinEmissionRate(100))
-      .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+    await expect(
+      raacMinter.connect(user1).setMinEmissionRate(100)
+    ).to.be.revertedWithCustomError(
+      raacMinter,
+      "AccessControlUnauthorizedAccount"
+    );
 
-    await expect(raacMinter.connect(user1).setMaxEmissionRate(1000))
-      .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+    await expect(
+      raacMinter.connect(user1).setMaxEmissionRate(1000)
+    ).to.be.revertedWithCustomError(
+      raacMinter,
+      "AccessControlUnauthorizedAccount"
+    );
 
-    await expect(raacMinter.connect(user1).setAdjustmentFactor(5))
-      .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+    await expect(
+      raacMinter.connect(user1).setAdjustmentFactor(5)
+    ).to.be.revertedWithCustomError(
+      raacMinter,
+      "AccessControlUnauthorizedAccount"
+    );
 
-    await expect(raacMinter.connect(user1).setUtilizationTarget(75))
-      .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+    await expect(
+      raacMinter.connect(user1).setUtilizationTarget(75)
+    ).to.be.revertedWithCustomError(
+      raacMinter,
+      "AccessControlUnauthorizedAccount"
+    );
   });
 
   // describe("RAACToken Ownership Transfer", function () {
-    // it("should allow owner to initiate RAACToken ownership transfer", async function () {
-    //   const tx = await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
-    //   await expect(tx).to.emit(raacMinter, "RAACTokenOwnershipTransferInitiated")
-    //     .withArgs(user1.address, await ethers.provider.getBlock('latest').then(b => b.timestamp + 7 * 24 * 60 * 60));
-      
-    //   expect(await raacMinter.pendingRAACTokenOwner()).to.equal(user1.address);
-    // });
+  // it("should allow owner to initiate RAACToken ownership transfer", async function () {
+  //   const tx = await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
+  //   await expect(tx).to.emit(raacMinter, "RAACTokenOwnershipTransferInitiated")
+  //     .withArgs(user1.address, await ethers.provider.getBlock('latest').then(b => b.timestamp + 7 * 24 * 60 * 60));
 
-    // it("should not allow non-owner to initiate RAACToken ownership transfer", async function () {
-    //   await expect(raacMinter.connect(user1).initiateRAACTokenOwnershipTransfer(user1.address))
-    //     .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
-    // });
+  //   expect(await raacMinter.pendingRAACTokenOwner()).to.equal(user1.address);
+  // });
 
-    // it("should not allow completing RAACToken ownership transfer before delay period", async function () {
-    //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
-    //   await expect(raacMinter.connect(owner).completeRAACTokenOwnershipTransfer())
-    //     .to.be.revertedWithCustomError(raacMinter, "OwnershipTransferNotDue");
-    // });
+  // it("should not allow non-owner to initiate RAACToken ownership transfer", async function () {
+  //   await expect(raacMinter.connect(user1).initiateRAACTokenOwnershipTransfer(user1.address))
+  //     .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+  // });
 
-    // it("should allow completing RAACToken ownership transfer after delay period", async function () {
-    //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
-      
-    //   // Increase time by 7 days
-    //   await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
-    //   await ethers.provider.send("evm_mine");
+  // it("should not allow completing RAACToken ownership transfer before delay period", async function () {
+  //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
+  //   await expect(raacMinter.connect(owner).completeRAACTokenOwnershipTransfer())
+  //     .to.be.revertedWithCustomError(raacMinter, "OwnershipTransferNotDue");
+  // });
 
-    //   const tx = await raacMinter.connect(owner).completeRAACTokenOwnershipTransfer();
-    //   await expect(tx).to.emit(raacMinter, "RAACTokenOwnershipTransferred")
-    //     .withArgs(user1.address);
+  // it("should allow completing RAACToken ownership transfer after delay period", async function () {
+  //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
 
-    //   expect(await raacToken.owner()).to.equal(user1.address);
-    // });
+  //   // Increase time by 7 days
+  //   await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
+  //   await ethers.provider.send("evm_mine");
 
-    // it("should not allow completing RAACToken ownership transfer after window expires", async function () {
-    //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
-      
-    //   // Increase time by 8 days
-    //   await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
-    //   await ethers.provider.send("evm_mine");
+  //   const tx = await raacMinter.connect(owner).completeRAACTokenOwnershipTransfer();
+  //   await expect(tx).to.emit(raacMinter, "RAACTokenOwnershipTransferred")
+  //     .withArgs(user1.address);
 
-    //   await expect(raacMinter.connect(owner).completeRAACTokenOwnershipTransfer())
-    //     .to.be.revertedWithCustomError(raacMinter, "OwnershipTransferExpired");
-    // });
+  //   expect(await raacToken.owner()).to.equal(user1.address);
+  // });
 
-    // it("should not allow non-owner to complete RAACToken ownership transfer", async function () {
-    //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
-      
-    //   // Increase time by 7 days
-    //   await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
-    //   await ethers.provider.send("evm_mine");
+  // it("should not allow completing RAACToken ownership transfer after window expires", async function () {
+  //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
 
-    //   await expect(raacMinter.connect(user1).completeRAACTokenOwnershipTransfer())
-    //     .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
-    // });
+  //   // Increase time by 8 days
+  //   await ethers.provider.send("evm_increaseTime", [8 * 24 * 60 * 60]);
+  //   await ethers.provider.send("evm_mine");
+
+  //   await expect(raacMinter.connect(owner).completeRAACTokenOwnershipTransfer())
+  //     .to.be.revertedWithCustomError(raacMinter, "OwnershipTransferExpired");
+  // });
+
+  // it("should not allow non-owner to complete RAACToken ownership transfer", async function () {
+  //   await raacMinter.connect(owner).initiateRAACTokenOwnershipTransfer(user1.address);
+
+  //   // Increase time by 7 days
+  //   await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
+  //   await ethers.provider.send("evm_mine");
+
+  //   await expect(raacMinter.connect(user1).completeRAACTokenOwnershipTransfer())
+  //     .to.be.revertedWithCustomError(raacMinter, "AccessControlUnauthorizedAccount");
+  // });
   // });
 });
