@@ -14,7 +14,7 @@ import "../../interfaces/core/tokens/IRToken.sol";
  * @title ReserveLibrary
  * @notice Library for managing reserve operations in the RAAC lending protocol.
  * @dev Provides functions to update reserve interests, calculate rates, and handle deposits and withdrawals.
- */
+ */f
 library ReserveLibrary {
     using WadRayMath for uint256;
     using PercentageMath for uint256;
@@ -351,7 +351,7 @@ library ReserveLibrary {
         uint256 optimalUtilizationRate,
         uint256 utilizationRate
     ) internal pure returns (uint256) {
-        /*c so this function is based around 3 things. first thing you have to note is that the borrow rate is based around 3 things. the prime rate which is a target borrow rate that RAAC set. the base rate is lowest borrow rate that RAAC will accept and the max rate is the maximum borrow rate. This function is what determines the usage rate we use for the usage index.
+        /*c so this function is based around 3 things. first thing you have to note is that the borrow rate is based around 3 things. The U.S. Prime Rate is the interest rate that commercial banks charge their most creditworthy (i.e. low-risk) corporate customers. It's a benchmark rate. the base rate is lowest borrow rate that RAAC will accept and the max rate is the maximum borrow rate. This function is what determines the usage rate we use for the usage index.
 
         */
 
@@ -384,7 +384,7 @@ library ReserveLibrary {
             uint256 rateIncrease = excessUtilization.rayMul(rateSlope).rayDiv(
                 maxExcessUtilization
             );
-            /*c The fact that excess utilisation rate is compared to max utilisation rate - optimal utilisation rate is because remember the idea is that when utilisation rate is over the optimal amount , we want the borrow rate to grow a lot to deter more borrows and encourage people to pay back their loans . 
+            /*c The fact that excess utilisation rate is compared to max utilisation rate (WadRayMath.RAY) - optimal utilisation rate is because remember the idea is that when utilisation rate is over the optimal amount , we want the borrow rate to grow a lot to deter more borrows and encourage people to pay back their loans . 
             Breaking It Down:
 
             1. Below Optimal Utilisation (U < U_optimal):
@@ -412,6 +412,7 @@ library ReserveLibrary {
         }
         return rate;
     }
+
 
     /**
      * @notice Calculates the utilization rate of the reserve.
